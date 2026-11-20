@@ -1,0 +1,27 @@
+# Build outputs and operating-system files
+.pio/
+firmware/.pio/
+build/
+dist/
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+venv/
+*.log
+diagnostics/
+
+# Never commit router passwords, pairing keys or local GUI state
+firmware/src/app_config.h
+windows_agent/agent_config.json
+**/companion.json
+*.secrets.json
+
+# Firmware snapshots may contain embedded credentials
+baseline/*.zip
+baseline/
+*.bin
+*.elf
+*.map
+*.exe
+MeoDeskCompanion-Windows-x64.zip

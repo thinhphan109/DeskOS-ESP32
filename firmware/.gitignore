@@ -1,0 +1,5 @@
+.pio/
+.vscode/
+__pycache__/
+*.pyc
+windows_agent/agent_config.json

@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "available": true,
+  "playing": true,
+  "title": "Sample track (fixture only)",
+  "artist": "Sample artist",
+  "position_ms": 45800,
+  "duration_ms": 187000
+}

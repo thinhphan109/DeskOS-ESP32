@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "pc_name": "WINDOWS-DEMO",
+  "cpu_percent": 12.5,
+  "gpu_percent": 0.0,
+  "ram_percent": 54.2,
+  "cpu_temp_c": null,
+  "gpu_temp_c": 53.0,
+  "battery_percent": 100.0,
+  "battery_plugged": true,
+  "demo": false
+}

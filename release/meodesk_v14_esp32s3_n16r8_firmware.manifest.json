@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "board": "meodesk-esp32s3-n16r8",
+  "firmware_version": "1.4.0",
+  "filename": "meodesk_v14_esp32s3_n16r8_firmware.bin",
+  "size": 1864160,
+  "sha256": "79605ae5ba75cf2d1dd8ace36ca456d8e7975a1ab2610b1488ea3d036127794e",
+  "signature": null,
+  "transport": "local-pairing-http"
+}

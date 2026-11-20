@@ -1,0 +1,23 @@
+# v1.7.0: Living Motion Engine, compiled ESP32-S3 N16R8 release; NOT flashed.
+fd056e346aca6b178ef17fa25bb6422be5a86307583ef9dfebd933bc16964240  meodesk_v17_esp32s3_n16r8_firmware.bin
+
+# v1.6.0: compiled firmware and 48-frame motion demo; offline verified, NOT flashed.
+a30a2dca7ac92580504b5c10b0e7129b68c994c212bf7480e10d047a20519b17  meodesk_v16_esp32s3_n16r8_firmware.bin
+75b563b7a09b3ad7073a7dfd6ae2f95aecdce7fd4bebe9b9cc194ee30b02d248  meodesk_v16_motion_demo.meocat
+
+# v1.5.0: firmware and default Cat Pack; both built/tested offline, not flashed.
+db3b6cf7c70052a93518c6e216c43abecc96d55acf7edc992c101d042345bbd4  meodesk_v15_esp32s3_n16r8_firmware.bin
+c0082eda6ac6e9f0f39f2b3d0c140418620ddb325062742a4ae414b71aed0506  meodesk_v15_default_cats.meocat
+
+# v1.4.0: compiled ESP32-S3 N16R8 firmware (historical fallback).
+79605ae5ba75cf2d1dd8ace36ca456d8e7975a1ab2610b1488ea3d036127794e  meodesk_v14_esp32s3_n16r8_firmware.bin
+
+# Older v1.0.0 was source only: no v1.0 firmware or EXE was compiled/verified.
+# Older compiled firmware and previous release snapshots are in ../baseline/.
+515305fd34d29b0d5038af49cfe5f1a422118dc059fc07e370ba877dd7aa8fa4  ../baseline/meodesk_v09_esp32s3_firmware.bin
+
+# Compiled v0.8 fallback and original v0.7.1 source in ../baseline/:
+00f64ed208479c175825a76b98d22551a81c476fe83f9467d86099c6cc8a682e  ../baseline/meodesk_v08_esp32s3_firmware.bin
+0595a905de5218cd04a96390ddad0b55173d5e97b1650696f047c71cf277d791  ../baseline/meodesk_esp32s3_v071_wifi_hotfix.zip
+e6072e17302af679bc32b182d5eb11320a245301d52cbda6e08273cef081e36e  meodesk_v18dev_esp32s3_n16r8_firmware.bin
+0172432dd9ec15448fa04addfee6100d30f8a826f03c9a0f1298fa1f6054aada  meodesk_v18dev_performance_lab_esp32s3_n16r8_firmware.bin

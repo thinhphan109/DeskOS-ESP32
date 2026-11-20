@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "format": "meodesk-catpack-rgb565le-v1",
+  "filename": "meodesk_v15_default_cats.meocat",
+  "size": 663552,
+  "frames": [
+    "boot",
+    "clock",
+    "paused",
+    "sleep",
+    "storage",
+    "network",
+    "offline",
+    "music",
+    "bambu",
+    "audio",
+    "health",
+    "healthy",
+    "hotspot",
+    "power",
+    "rescue",
+    "shutdown"
+  ],
+  "width": 144,
+  "height": 144,
+  "sha256": "c0082eda6ac6e9f0f39f2b3d0c140418620ddb325062742a4ae414b71aed0506",
+  "signature": null
+}
