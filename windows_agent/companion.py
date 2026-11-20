@@ -707,17 +707,20 @@ class MainWindow(QMainWindow):
             toggle_row.addWidget(entry)
         layout.addLayout(toggle_row)
         self.studio_buttons = {}
-        for action, label, captions in (("theme", "Giao diện TFT", ("Cozy Day", "Midnight", "Auto")),
+        for action, label, captions in (("theme", "Giao diện TFT", ("Cozy Day", "Midnight", "Auto", "Cyberpunk", "Sakura", "Minimal")),
                                         ("fps", "Mục tiêu FPS", ("20", "25", "30", "Auto 20–25"))):
             row = QHBoxLayout()
             row.addWidget(text(label, "smallLabel"))
             self.studio_buttons[action] = []
+            theme_grid = QGridLayout() if action == "theme" else None
+            if theme_grid is not None: row.addLayout(theme_grid, 1)
             for value, caption in enumerate(captions):
                 entry = button(caption)
                 entry.setCheckable(True)
                 entry.clicked.connect(lambda checked=False, a=action, v=value: self.send_device_control(a, v))
                 self.studio_buttons[action].append(entry)
-                row.addWidget(entry)
+                if theme_grid is not None: theme_grid.addWidget(entry,value//3,value%3)
+                else: row.addWidget(entry)
             layout.addLayout(row)
         layout.addWidget(text("Bốn cảnh yêu thích · dùng cho chế độ Auto", "smallLabel"))
         favorites = QGridLayout()

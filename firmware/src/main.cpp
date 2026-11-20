@@ -12,6 +12,7 @@
 #include "core/card_refresh.h"
 #include "core/performance_lab.h"
 #include "core/widget_contract.h"
+#include "core/theme_palette.h"
 #include "render/widget_renderer.h"
 
 static PerformanceLab performanceLab;
@@ -153,24 +154,16 @@ bool realClock(tm &localTime) {
 }
 
 void applyPalette(bool night) {
-  nightPalette = night;
-  BG = night ? rgb(30, 34, 44) : CAT_SOURCE_BG;
-  PAPER = night ? rgb(45, 50, 65) : rgb(255, 255, 255);
-  SHADOW = night ? rgb(24, 28, 38) : rgb(238, 226, 221);
-  INK = night ? rgb(248, 244, 239) : rgb(43, 49, 69);
-  MUTED = night ? rgb(171, 181, 191) : rgb(126, 130, 148);
-  MINT = night ? rgb(46, 82, 71) : rgb(189, 238, 220);
-  TEAL = night ? rgb(155, 232, 198) : rgb(53, 142, 123);
-  PEACH = night ? rgb(89, 57, 68) : rgb(255, 220, 206);
-  CORAL = night ? rgb(255, 155, 144) : rgb(236, 119, 112);
-  LILAC = night ? rgb(117, 105, 153) : rgb(226, 215, 250);
-  GOLD = rgb(253, 204, 102);
-  TRACK = night ? rgb(73, 77, 91) : rgb(238, 237, 239);
+  const ThemePalette p=themePalette(themeChoice,night);
+  nightPalette=p.dark;
+  BG=p.bg; PAPER=p.paper; SHADOW=p.shadow; INK=p.ink; MUTED=p.muted;
+  MINT=p.mint; TEAL=p.teal; PEACH=p.peach; CORAL=p.coral;
+  LILAC=p.lilac; GOLD=p.gold; TRACK=p.track;
 }
 
 bool themeShouldBeNight() {
-  if (themeChoice == 1) return true;
-  if (themeChoice == 0) return false;
+  if (themeChoice == 1 || themeChoice == 3) return true;
+  if (themeChoice != 2) return false;
   tm local{};
   return realClock(local) && (local.tm_hour >= 20 || local.tm_hour < 6);
 }
@@ -401,11 +394,11 @@ static uint16_t mix565(uint16_t first, uint16_t second, uint8_t amount) {
 }
 
 static uint16_t backgroundForTheme(uint16_t pixel) {
-  return nightPalette && pixel == CAT_SOURCE_BG ? BG : pixel;
+  return pixel == CAT_SOURCE_BG ? BG : pixel;
 }
 
 // Asset backgrounds were flattened over warm ivory (0xFF9E); remap that exact
-// key in night mode. Anti-aliased edge pixels may retain a small light halo.
+// key for each palette. Anti-aliased edge pixels may retain a small light halo.
 void renderCatStrip(uint16_t *dest, int rowStart, int bob,
                     const uint16_t *cat, const uint16_t *previous,
                     uint8_t fadeAmount, bool sparkle) {
@@ -420,7 +413,7 @@ void renderCatStrip(uint16_t *dest, int rowStart, int bob,
     const int sourceRow = row - bob;
     if (sourceRow >= 0 && sourceRow < CAT_H) {
       const uint16_t *source = cat + sourceRow * CAT_W;
-      if (!previous && !nightPalette) {
+      if (!previous && BG == CAT_SOURCE_BG) {
         memcpy(out, source, CAT_W * sizeof(uint16_t));
       } else {
         const uint16_t *from = previous ? previous + sourceRow * CAT_W : nullptr;
@@ -1210,10 +1203,11 @@ bool webControl(const String &action, int value) {
     return true;
   }
   if (action == "theme") {
-    if (value < 0 || value > 2) return false;
+    if (value < 0 || value > 5) return false;
     themeChoice = (uint8_t)value;
     pcBridgeSaveTheme(themeChoice);
     applyPalette(themeShouldBeNight());
+    if(themeChoice==5) currentPage=CLOCK_PAGE;
     if (!colorTestActive) setPage(currentPage);
     return true;
   }

@@ -54,3 +54,7 @@ Web and native Windows Scene Studio edit the same persisted layout with drag/sna
 ## v2.2 source checkpoint
 
 Real Windows session idle input drives bounded sleep/wake and once-daily morning greetings. Focus, media, quiet and critical priorities remain. See [Cat Life](CAT_LIFE_V22.md). New authored animation and compressed pack formats remain separate work.
+
+## v2.3 source checkpoint
+
+Cozy, Midnight and Auto keep IDs 0/1/2. Cyberpunk, Sakura and Minimal add IDs 3/4/5 across TFT/Web/Windows and portable profiles. Minimal selects Clock when chosen through its control. See [Themes](THEMES_V23.md).

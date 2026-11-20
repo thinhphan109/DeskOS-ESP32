@@ -5,7 +5,7 @@ from pathlib import Path
 from scene_layout import validate_layout
 
 BOARD = "meodesk-esp32s3-n16r8"
-RANGES = {"theme": (0, 2), "fps_profile": (0, 3), "motion_style": (0, 2),
+RANGES = {"theme": (0, 5), "fps_profile": (0, 3), "motion_style": (0, 2),
           "focus_work_min": (1, 180), "focus_break_min": (1, 60), "focus_goal": (1, 24),
           "cpu_limit": (50, 99), "gpu_limit": (50, 99), "temp_limit": (55, 110), "battery_limit": (5, 50)}
 FLAGS = ("motion", "auto_pages", "quiet")

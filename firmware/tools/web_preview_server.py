@@ -224,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
                                "focus_sessions": STATE["focus_sessions"],
                                "focus_work_min": STATE["focus_work_min"], "focus_break_min": STATE["focus_break_min"], "focus_goal": STATE["focus_goal"],
                                "focus_duration_s": STATE["focus_work_min" if STATE["focus_phase"] == "work" else "focus_break_min"] * 60,
-                               "theme": STATE["theme"], "night_theme": STATE["theme"] == 1,
+                               "theme": STATE["theme"], "night_theme": STATE["theme"] in (1,3),
                                "cat_fps": effective_fps_target() - 0.3,
                                "fps_profile": STATE["fps_profile"],
                                "fps_target": effective_fps_target(),
@@ -288,7 +288,7 @@ class Handler(BaseHTTPRequestHandler):
                     STATE[field] = not STATE[field]
                 elif action in ("focus", "focus_reset", "focus_skip"):
                     change_focus(action)
-                elif action == "theme" and 0 <= value <= 2:
+                elif action == "theme" and 0 <= value <= 5:
                     STATE["theme"] = value
                 elif action == "fps" and 0 <= value <= 3:
                     STATE["fps_profile"] = value

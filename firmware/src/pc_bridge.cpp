@@ -230,7 +230,7 @@ void pcBridgeSetFocus(bool active) {
 uint8_t pcBridgeTheme() { return savedTheme; }
 
 bool pcBridgeSaveTheme(uint8_t theme) {
-  if (theme > 2) return false;
+  if (theme > 5) return false;
   savedTheme = theme;
   deviceProfile.theme = theme;
   if (prefsReady) prefs.putUChar("theme", theme);
@@ -1530,7 +1530,7 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
     healthSettings.tempLimit = constrain(prefs.getUChar("temp", 80), 55, 110);
     healthSettings.batteryLimit = constrain(prefs.getUChar("battery", 20), 5, 50);
     healthSettings.quiet = prefs.getBool("quiet", false);
-    savedTheme = constrain(prefs.getUChar("theme", 0), 0, 2);
+    savedTheme = constrain(prefs.getUChar("theme", 0), 0, 5);
     savedFpsProfile = constrain(prefs.getUChar("fps", 1), 0, 3);
     savedMotionStyle = constrain(prefs.getUChar("motionstyle", 1), 0, 2);
     wifiSsid = prefs.getString("ssid", WIFI_SSID);

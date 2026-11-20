@@ -237,7 +237,7 @@
         "theme": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 5
         },
         "fps_profile": {
           "type": "integer",

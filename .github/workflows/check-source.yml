@@ -15,7 +15,7 @@ jobs:
       - run: python -m unittest discover -s windows_agent/tests -q
       - name: Native domain tests
         run: |
-          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life; do
+          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life theme_palette; do
             g++ -std=c++17 -Wall -Wextra -Werror firmware/tools/test_${test}.cpp -o /tmp/meodesk-${test}
             /tmp/meodesk-${test}
           done
