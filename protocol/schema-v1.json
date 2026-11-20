@@ -97,6 +97,14 @@
         },
         "demo": {
           "type": "boolean"
+        },
+        "pc_idle_s": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 604800
         }
       },
       "additionalProperties": true

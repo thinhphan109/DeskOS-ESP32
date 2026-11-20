@@ -9,7 +9,7 @@
 class CatBehavior {
  public:
   enum Persona : uint8_t {
-    SEARCHING, COZY, SLEEPY, MUSIC, FOCUS, BUSY, HOT, BATTERY, CELEBRATE
+    SEARCHING, COZY, SLEEPY, MUSIC, FOCUS, BUSY, HOT, BATTERY, CELEBRATE, WAKING, GREETING
   };
 
   struct Context {
@@ -19,6 +19,8 @@ class CatBehavior {
     bool focusing = false;
     bool quiet = false;
     bool late = false;
+    int32_t idleSeconds = -1; // only fresh, real session input; -1 unavailable
+    uint32_t morningDay = 0; // valid local date token, or 0 outside morning
   };
 
   Persona persona() const { return current_; }
@@ -35,6 +37,8 @@ class CatBehavior {
       case HOT: return "too warm";
       case BATTERY: return "need charge";
       case CELEBRATE: return "celebrating";
+      case WAKING: return "waking up";
+      case GREETING: return "good morning";
     }
     return "cozy";
   }
@@ -62,6 +66,15 @@ class CatBehavior {
     const bool low = ctx.sensorMood && !strcmp(ctx.sensorMood, "low_battery");
     const bool stressed = ctx.sensorMood && !strcmp(ctx.sensorMood, "stressed");
     const bool critical = hot || low || stressed;
+    if (!ctx.pcOnline) { wasAway_ = false; wakingActive_ = false; greetingActive_ = false; }
+    if (ctx.pcOnline && ctx.idleSeconds >= 300) wasAway_ = true;
+    if (ctx.pcOnline && ctx.idleSeconds >= 0 && ctx.idleSeconds < 30 && wasAway_) {
+      wasAway_ = false; wakingMs_ = now; wakingActive_ = true;
+    }
+    const bool available = ctx.pcOnline && !ctx.quiet && !ctx.late && !ctx.focusing && !ctx.playing && !critical;
+    if (available && ctx.morningDay && ctx.morningDay != greetedDay_ && ctx.idleSeconds >= 0 && ctx.idleSeconds < 300) {
+      greetedDay_ = ctx.morningDay; greetingMs_ = now; greetingActive_ = true;
+    }
 
     Persona candidate = COZY;
     if (hot) candidate = HOT;
@@ -72,7 +85,9 @@ class CatBehavior {
     else if (ctx.focusing) candidate = FOCUS;
     else if (ctx.playing) candidate = MUSIC;
     else if (!ctx.pcOnline) candidate = SEARCHING;
-    else if (ctx.quiet || ctx.late || energy_ < 15) candidate = SLEEPY;
+    else if (ctx.quiet || ctx.late || energy_ < 15 || ctx.idleSeconds >= 300) candidate = SLEEPY;
+    else if (greetingActive_ && (uint32_t)(now-greetingMs_) < 7500UL) candidate = GREETING;
+    else if (wakingActive_ && (uint32_t)(now-wakingMs_) < 7500UL) candidate = WAKING;
     else if (ctx.sensorMood && !strcmp(ctx.sensorMood, "sleep")) candidate = SLEEPY;
 
     if (candidate == current_) { pending_ = candidate; pendingSinceMs_ = now; return false; }
@@ -96,5 +111,7 @@ class CatBehavior {
   uint32_t energyMark_ = 0;
   uint32_t celebrationMs_ = 0;
   bool celebrationActive_ = false;
+  bool wasAway_ = false, wakingActive_ = false, greetingActive_ = false;
+  uint32_t wakingMs_ = 0, greetingMs_ = 0, greetedDay_ = 0;
   uint8_t energy_ = 82;
 };

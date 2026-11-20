@@ -1,2 +1,2 @@
 #pragma once
-#define MEO_VERSION "2.1.0-dev"
+#define MEO_VERSION "2.2.0-dev"

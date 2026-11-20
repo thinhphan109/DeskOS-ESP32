@@ -290,6 +290,8 @@ const uint16_t *petSprite() {
     case CatBehavior::BATTERY: return cat_shutdown;
     case CatBehavior::CELEBRATE: return cat_healthy;
     case CatBehavior::COZY: return cat_healthy;
+    case CatBehavior::WAKING: return cat_boot;
+    case CatBehavior::GREETING: return cat_healthy;
   }
   return cat_healthy;
 }
@@ -1452,6 +1454,11 @@ void loop() {
     context.focusing = focusTimer.running() && focusTimer.phase() == FocusTimer::WORK;
     context.quiet = healthSettings.quiet;
     context.late = night;
+    if(pcTelemetryFresh() && !pcTelemetry.demo) {
+      context.idleSeconds=pcTelemetry.idleSeconds;
+      if(realClock(timeInfo) && timeInfo.tm_hour>=7 && timeInfo.tm_hour<11)
+        context.morningDay=static_cast<uint32_t>(timeInfo.tm_year*366+timeInfo.tm_yday+1);
+    }
     const bool moodChanged = petEngine.tick(context, now);
     if (moodChanged) {
       if (!catDmaReady) {

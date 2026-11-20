@@ -868,6 +868,13 @@ static void receiveTelemetry() {
   }
 
   // Commit atomically after checking the entire payload.
+  int32_t idleSeconds=-1;
+  if(!doc["pc_idle_s"].isNull()) {
+    if(!doc["pc_idle_s"].is<int>() || doc["pc_idle_s"].as<int>()<0 || doc["pc_idle_s"].as<int>()>604800) {
+      replyError(400,"pc_idle_s must be null or integer 0..604800"); return;
+    }
+    idleSeconds=doc["pc_idle_s"];
+  }
   PcTelemetry fresh;
   fresh.received = true;
   fresh.demo = doc["demo"] | false;
@@ -880,6 +887,7 @@ static void receiveTelemetry() {
   fresh.batteryPercent = battery;
   fresh.batteryPlugged = plugged;
   fresh.pcUptimeS = doc["pc_uptime_s"] | 0UL;
+  fresh.idleSeconds = fresh.demo ? -1 : idleSeconds;
   fresh.ramUsedGB = doc["ram_used_gb"] | 0.0f;
   fresh.ramTotalGB = doc["ram_total_gb"] | 0.0f;
   fresh.vramUsedGB = vramUsed;
@@ -967,6 +975,8 @@ static void fillStatus(JsonDocument &doc) {
   doc["real_emotion"] = realEmotionName();
   doc["preview_active"] = previewActive();
   doc["pc_name"] = fresh ? pcTelemetry.pcName : "";
+  if(fresh && !pcTelemetry.demo && pcTelemetry.idleSeconds>=0) doc["pc_idle_s"]=pcTelemetry.idleSeconds;
+  else doc["pc_idle_s"]=nullptr;
   doc["gpu_name"] = fresh ? pcTelemetry.gpuName : "";
   if (fresh) {
     doc["cpu_percent"] = pcTelemetry.cpuPercent;

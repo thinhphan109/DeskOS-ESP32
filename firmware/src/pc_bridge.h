@@ -18,6 +18,7 @@ struct PcTelemetry {
   float batteryPercent = -1;
   int8_t batteryPlugged = -1; // -1=not available, 0=discharging, 1=charging/AC
   uint32_t pcUptimeS = 0;
+  int32_t idleSeconds = -1;
   float ramUsedGB = 0;
   float ramTotalGB = 0;
   float vramUsedGB = -1;

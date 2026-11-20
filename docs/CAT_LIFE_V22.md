@@ -1,0 +1,7 @@
+# Cat Life — v2.2.0-dev
+
+The Windows agent now sends optional `pc_idle_s`: seconds since input in its own interactive session. It uses [GetLastInputInfo](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getlastinputinfo); this is session-local information, not proof that the PC is locked. No keys, titles or application names are collected. Unsupported platforms/API failures report null. Tick rollover is handled; implausible future ticks report unavailable. Idle duration is capped at seven days.
+
+Only fresh non-DEMO telemetry can drive the new presence behavior. After five minutes without input the cat may sleep. Returning within 30 seconds of input triggers a short waking cue. With valid local NTP time, a fresh active session between 07:00 and 11:00 can receive one morning greeting per local day per boot. Focus, playing music, quiet/night and critical alerts retain priority. Offline clears pending greeting/waking cues; existing dwell timing avoids rapid oscillation.
+
+The new personas reuse existing art and motion cues. This release does not claim newly authored multi-frame animation, real audio beats, or lock detection. `.meocat` v1/v2, A/B asset banks, PSRAM and the original DMA renderer are unchanged. Native tests cover idle/wake, daily greeting, priority and offline behavior; the actual Windows idle API returned an available reading on the development machine. Behavior on the TFT remains a deployment acceptance check.

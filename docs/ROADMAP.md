@@ -50,3 +50,7 @@ Widget scene ID 14, bounded snapshot renderer and atomic layout/profile persiste
 ## v2.1 source checkpoint
 
 Web and native Windows Scene Studio edit the same persisted layout with drag/snap, geometry/overlap validation, JSON portability and unsaved-draft protection. See [Scene Studio](SCENE_STUDIO_V21.md).
+
+## v2.2 source checkpoint
+
+Real Windows session idle input drives bounded sleep/wake and once-daily morning greetings. Focus, media, quiet and critical priorities remain. See [Cat Life](CAT_LIFE_V22.md). New authored animation and compressed pack formats remain separate work.

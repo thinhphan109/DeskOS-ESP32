@@ -18,6 +18,7 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import Any
+from presence import read_idle_seconds
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -293,6 +294,7 @@ def collect_real(nvidia: NvidiaGpu, gpu_provider: str, lhm_url: str) -> dict[str
         "battery_percent": battery_percent,
         "battery_plugged": plugged,
         "pc_uptime_s": max(0, int(time.time() - psutil.boot_time())),
+        "pc_idle_s": read_idle_seconds(),
         "demo": False,
     }
 
