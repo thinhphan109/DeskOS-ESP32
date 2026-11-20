@@ -46,3 +46,7 @@ existing local update workflow simple while measuring and debugging.
 ## v2.0 source checkpoint
 
 Widget scene ID 14, bounded snapshot renderer and atomic layout/profile persistence are implemented. See [UI Engine](UI_ENGINE_V20.md). Drag-and-drop tooling is the next source milestone; physical acceptance remains deferred.
+
+## v2.1 source checkpoint
+
+Web and native Windows Scene Studio edit the same persisted layout with drag/snap, geometry/overlap validation, JSON portability and unsaved-draft protection. See [Scene Studio](SCENE_STUDIO_V21.md).

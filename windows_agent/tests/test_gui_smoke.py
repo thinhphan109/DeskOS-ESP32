@@ -14,6 +14,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "PySide6 optional in CLI-only installation")
 class GuiSmokeTests(unittest.TestCase):
+    def test_scene_editor_validates_moves_and_keeps_dirty_draft(self):
+        from PySide6.QtWidgets import QApplication
+        from scene_editor import SceneEditor
+        from scene_layout import DEFAULT_LAYOUT
+        app = QApplication.instance() or QApplication([])
+        editor = SceneEditor()
+        editor.fields["h"].setValue(45)
+        self.assertFalse(editor.apply_button.isEnabled())
+        editor.set_data(DEFAULT_LAYOUT)
+        self.assertEqual(editor.data["widgets"][0]["h"],45)
+        editor.set_data(DEFAULT_LAYOUT,force=True)
+        self.assertTrue(editor.apply_button.isEnabled())
+        editor.move(1,0,38)
+        self.assertEqual(editor.data["widgets"][1]["y"],42)
+        editor.fields["h"].setValue(36)
+        editor.move(1,0,38)
+        self.assertEqual(editor.data["widgets"][1]["y"],38)
+        editor.close()
+
     def test_preview_controls_never_write_or_connect_to_device(self):
         from PySide6.QtWidgets import QApplication
         from companion import MainWindow

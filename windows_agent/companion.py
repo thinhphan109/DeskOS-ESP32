@@ -27,6 +27,8 @@ import discovery
 import ota_client
 import catpack_client
 import device_config
+from scene_editor import SceneEditor
+from scene_layout import validate_layout
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings
 from state_sync import StateCursor, FocusDisplay
@@ -730,6 +732,16 @@ class MainWindow(QMainWindow):
         layout.addLayout(favorites)
         box.addWidget(controls)
 
+        scene_panel, scene_box = card()
+        self.scene_editor = SceneEditor()
+        self.scene_revision = None
+        self.scene_request_pending = False
+        self.scene_retry_at = 0.0
+        self.scene_editor.reload_requested.connect(lambda: self.request_scene_layout(force=True))
+        self.scene_editor.apply_requested.connect(self.save_widget_layout)
+        scene_box.addWidget(self.scene_editor)
+        box.addWidget(scene_panel)
+
         details, d = card("focusCard")
         d.addWidget(text("CAT COLLECTION / ACTIVE BANK", "eyebrow"))
         self.pack_info = text("Đang chờ kết nối với ESP32-S3 N16R8.", "cardTitle", wrap=True)
@@ -824,6 +836,41 @@ class MainWindow(QMainWindow):
             except (OSError, ValueError, TimeoutError) as error:
                 self.bus.status.emit({"type": "config_result", "message": str(error)[:160]})
         threading.Thread(target=task, name="MeoDeskConfig", daemon=True).start()
+
+    def request_scene_layout(self, force=False) -> None:
+        if self.preview_mode:
+            self.scene_editor.hint.setText("DEMO · bố cục cục bộ, không đọc thiết bị")
+            return
+        if self.scene_request_pending or not self.settings.host or not self.key:
+            return
+        host, key = self.settings.host, self.key
+        before = json.dumps(self.scene_editor.data, sort_keys=True)
+        self.scene_request_pending = True
+        def task():
+            try:
+                data = validate_layout(json_request(host,"/api/v1/scene-layout",key,timeout=2.0))
+                self.bus.status.emit({"type":"scene_layout", "host":host, "data":data, "force":force, "before":before})
+            except (OSError, ValueError, TimeoutError) as error:
+                self.bus.status.emit({"type":"scene_error", "host":host, "message":str(error)[:160]})
+        threading.Thread(target=task,name="MeoDeskSceneRead",daemon=True).start()
+
+    def save_widget_layout(self, data) -> None:
+        if self.preview_mode:
+            self.scene_editor.dirty = False
+            self.scene_editor.hint.setText("DEMO · đã áp dụng bố cục cục bộ")
+            self.send_device_control("page",14)
+            return
+        if not self.settings.host or not self.key:
+            self.scene_editor.hint.setText("Nhập IP và pairing key ở tab Thiết bị."); return
+        host, key = self.settings.host, self.key
+        def task():
+            try:
+                result = json_request(host,"/api/v1/scene-layout",key,data,timeout=2.0)
+                if result.get("ok") is not True: raise ValueError("Thiết bị chưa lưu bố cục.")
+                self.bus.status.emit({"type":"scene_saved", "host":host, "data":data})
+            except (OSError, ValueError, TimeoutError) as error:
+                self.bus.status.emit({"type":"scene_error", "host":host, "message":str(error)[:160]})
+        threading.Thread(target=task,name="MeoDeskSceneSave",daemon=True).start()
 
     def export_device_config(self) -> None:
         if self.preview_mode:
@@ -1077,6 +1124,22 @@ class MainWindow(QMainWindow):
 
     def update_from_worker(self, event: dict) -> None:
         kind = event.get("type")
+        if kind in ("scene_layout", "scene_saved", "scene_error"):
+            if event.get("host") != self.settings.host: return
+            self.scene_request_pending = False
+            if kind == "scene_error":
+                self.scene_retry_at = time.monotonic()+5
+                self.scene_revision = None
+                self.scene_editor.hint.setText(event["message"])
+            elif kind == "scene_saved":
+                if self.scene_editor.data == event["data"]:
+                    self.scene_editor.dirty = False
+                    self.scene_editor.hint.setText("Đã lưu bố cục lên thiết bị.")
+                self.send_device_control("page",14)
+            else:
+                unchanged = json.dumps(self.scene_editor.data, sort_keys=True) == event["before"]
+                self.scene_editor.set_data(event["data"],force=event.get("force",False) and unchanged)
+            return
         if kind == "device_state":
             if event.get("host", self.settings.host) != self.settings.host:
                 return
@@ -1089,6 +1152,11 @@ class MainWindow(QMainWindow):
             if self.worker and old_boot is not None and old_boot != self.state_cursor.boot:
                 self.worker.reset_device_session()
             self._stream_supported = "state_websocket_v1" in data.get("capabilities", [])
+            scene_revision = (self.settings.host, data.get("state_boot_id"), data.get("scene_layout_revision"))
+            if ("widget_scene_v1" in data.get("capabilities",[]) and scene_revision != self.scene_revision
+                    and self.key and not self.scene_request_pending and time.monotonic() >= self.scene_retry_at):
+                self.scene_revision = scene_revision
+                self.request_scene_layout()
             self.lab_toggle.setEnabled("performance_lab_v1" in data.get("capabilities", []) or self.preview_mode)
             self.lab_toggle.setChecked(bool(data.get("lab_enabled")))
             self.lab_toggle.setText("Tắt đo Performance Lab" if data.get("lab_enabled") else "Bật đo Performance Lab")
