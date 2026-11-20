@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+from scene_layout import validate_layout
 
 BOARD = "meodesk-esp32s3-n16r8"
 RANGES = {"theme": (0, 2), "fps_profile": (0, 3), "motion_style": (0, 2),
@@ -22,10 +23,12 @@ def validate_backup(data: dict) -> dict:
     if any(type(profile[key]) is not bool for key in FLAGS):
         raise ValueError("Configuration flags must be booleans")
     scenes = profile["scene_slots"]
-    if not isinstance(scenes, list) or len(scenes) != 4 or any(type(v) is not int or not 0 <= v < 14 for v in scenes) or len(set(scenes)) != 4:
+    if not isinstance(scenes, list) or len(scenes) != 4 or any(type(v) is not int or not 0 <= v < 15 for v in scenes) or len(set(scenes)) != 4:
         raise ValueError("Choose four different valid scenes")
     # Only an allowlisted envelope ever reaches disk or the device.
     result = {"schema": 1, "board": BOARD, "profile": dict(profile, scene_slots=list(scenes))}
+    if "scene_layout" in data:
+        result["scene_layout"] = validate_layout(data["scene_layout"])
     if isinstance(data.get("firmware_version"), str):
         result["firmware_version"] = data["firmware_version"][:40]
     return result

@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "core/media_state.h"
 #include "core/device_profile.h"
+#include "core/scene_layout.h"
 
 struct PcTelemetry {
   bool received = false;
@@ -45,6 +46,7 @@ extern PcTelemetry pcTelemetry;
 extern HealthSettings healthSettings;
 extern MediaState pcMedia;
 const DeviceProfile &pcBridgeProfile();
+const SceneLayout &pcBridgeSceneLayout();
 // Cover art is volatile PSRAM/internal SRAM, 64x64 RGB565, owned by the bridge. The pointer
 // must only be used on the Arduino main loop (HTTP and TFT are serviced there).
 const uint16_t *pcBridgeArtworkPixels();

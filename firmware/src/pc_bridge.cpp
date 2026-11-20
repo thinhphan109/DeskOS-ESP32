@@ -62,8 +62,11 @@ static bool stateAuthorized[4] = {};
 static Preferences prefs;
 static bool prefsReady = false;
 static DeviceProfile deviceProfile;
+static SceneLayout sceneLayout;
+static uint32_t sceneLayoutRevision=0;
 const DeviceProfile &pcBridgeProfile() { return deviceProfile; }
-static bool persistProfile(const DeviceProfile &profile);
+const SceneLayout &pcBridgeSceneLayout() { return sceneLayout; }
+static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout = nullptr);
 static UiControlCallback controlHandler = nullptr;
 static UiStatusCallback statusHandler = nullptr;
 static UiPerformanceCallback performanceHandler = nullptr;
@@ -169,7 +172,7 @@ bool pcBridgeLoadSceneSlot(uint8_t slot, uint8_t &page) {
 }
 
 bool pcBridgeSaveSceneSlot(uint8_t slot, uint8_t page) {
-  if (!prefsReady || slot >= 4 || page >= 14) return false;
+  if (!prefsReady || slot >= 4 || page >= DeviceProfile::PAGE_COUNT) return false;
   char key[5];
   snprintf(key, sizeof(key), "sc%u", (unsigned)slot);
   deviceProfile.scenes[slot] = page;
@@ -388,6 +391,33 @@ static void encodeProfile(JsonObject out, const DeviceProfile &p) {
   for (uint8_t i = 0; i < 4; ++i) scenes.add(p.scenes[i]);
 }
 
+static void encodeLayout(JsonObject out, const SceneLayout &layout) {
+  out["schema"] = 1;
+  JsonArray widgets = out["widgets"].to<JsonArray>();
+  for (uint8_t i=0;i<layout.count;++i) {
+    const auto &w=layout.widgets[i]; JsonObject item=widgets.add<JsonObject>();
+    item["kind"]=static_cast<uint8_t>(w.kind); item["x"]=w.bounds.x; item["y"]=w.bounds.y;
+    item["w"]=w.bounds.width; item["h"]=w.bounds.height; item["label"]=w.label;
+  }
+}
+
+static bool decodeLayout(JsonObjectConst input, SceneLayout &layout) {
+  if (!input["schema"].is<int>() || input["schema"]!=1 || !input["widgets"].is<JsonArrayConst>() ||
+      input["widgets"].size()<1 || input["widgets"].size()>SceneLayout::CAPACITY) return false;
+  layout.count=input["widgets"].size();
+  for(uint8_t i=0;i<layout.count;++i) {
+    JsonObjectConst item=input["widgets"][i];
+    for(const char *key : {"kind","x","y","w","h"}) if(!item[key].is<int>()) return false;
+    const int kind=item["kind"], x=item["x"], y=item["y"], w=item["w"], h=item["h"];
+    if(kind<0||kind>7||x<0||x>161||y<0||y>119||w<32||w>162||h<20||h>120||
+       !item["label"].is<const char*>()||strlen(item["label"].as<const char*>())>31) return false;
+    auto &widget=layout.widgets[i]; widget.kind=static_cast<WidgetKind>(kind);
+    widget.bounds={static_cast<int16_t>(x),static_cast<int16_t>(y),static_cast<uint16_t>(w),static_cast<uint16_t>(h)};
+    snprintf(widget.label,sizeof(widget.label),"%s",item["label"].as<const char*>());
+  }
+  return layout.valid();
+}
+
 static bool decodeProfile(JsonObjectConst in, DeviceProfile &p) {
   const char *numbers[] = {"theme", "fps_profile", "motion_style", "focus_work_min",
     "focus_break_min", "focus_goal", "cpu_limit", "gpu_limit", "temp_limit", "battery_limit"};
@@ -401,16 +431,17 @@ static bool decodeProfile(JsonObjectConst in, DeviceProfile &p) {
   p.motion = in["motion"]; p.autoPages = in["auto_pages"]; p.quiet = in["quiet"];
   for (uint8_t i = 0; i < 4; ++i) {
     if (!in["scene_slots"][i].is<int>() || in["scene_slots"][i].as<int>() < 0 ||
-        in["scene_slots"][i].as<int>() >= 14) return false;
+        in["scene_slots"][i].as<int>() >= DeviceProfile::PAGE_COUNT) return false;
     p.scenes[i] = in["scene_slots"][i];
   }
   return p.valid();
 }
 
-static bool persistProfile(const DeviceProfile &profile) {
+static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout) {
   if (!prefsReady || !profile.valid()) return false;
   JsonDocument doc; doc["schema"] = DeviceProfile::SCHEMA;
   encodeProfile(doc["profile"].to<JsonObject>(), profile);
+  encodeLayout(doc["scene_layout"].to<JsonObject>(), layout ? *layout : sceneLayout);
   String data; serializeJson(doc, data);
   // One NVS value: a failed write cannot partially restore individual fields.
   if (prefs.getString("profile_v1", "") == data) return true;
@@ -448,6 +479,7 @@ static void exportConfiguration() {
   doc["board"] = MeoOtaManager::BOARD_ID;
   doc["firmware_version"] = MEO_VERSION;
   encodeProfile(doc["profile"].to<JsonObject>(), deviceProfile);
+  encodeLayout(doc["scene_layout"].to<JsonObject>(), sceneLayout);
   replyJson(200, doc);
 }
 
@@ -468,8 +500,13 @@ static void importConfiguration() {
     replyError(400, "invalid or incompatible configuration"); return;
   }
   if (!controlHandler) { replyError(503, "renderer unavailable"); return; }
-  if (!persistProfile(candidate)) { replyError(507, "configuration was not persisted; current settings retained"); return; }
+  SceneLayout candidateLayout=sceneLayout;
+  if(!input["scene_layout"].isNull() &&
+     !decodeLayout(input["scene_layout"].as<JsonObjectConst>(),candidateLayout)) { replyError(400,"invalid scene layout"); return; }
+  if (!persistProfile(candidate,&candidateLayout)) { replyError(507, "configuration was not persisted; current settings retained"); return; }
   deviceProfile = candidate;
+  sceneLayout = candidateLayout;
+  ++sceneLayoutRevision;
   applyProfileMetadata();
   controlHandler("profile", 0);
   JsonDocument result; result["ok"] = true; result["persisted"] = true;
@@ -496,6 +533,24 @@ static void configureFocus() {
   JsonDocument answer; answer["ok"] = true; answer["schema"] = 1;
   if (statusHandler) statusHandler(answer);
   replyJson(200, answer);
+}
+
+static void exportSceneLayout() {
+  if(!authorized()) return;
+  JsonDocument doc; encodeLayout(doc.to<JsonObject>(),sceneLayout); doc["board"]=MeoOtaManager::BOARD_ID;
+  replyJson(200,doc);
+}
+static void importSceneLayout() {
+  if(!authorized()) return;
+  const String payload=httpServer.arg("plain");
+  JsonDocument input; SceneLayout candidate;
+  if(payload.length()>1600 || deserializeJson(input,payload) || !decodeLayout(input.as<JsonObjectConst>(),candidate)) {
+    replyError(400,"invalid layout: 1..6 non-overlapping widgets inside 162x120"); return;
+  }
+  if(!persistProfile(deviceProfile,&candidate)) { replyError(507,"layout not persisted; current layout retained"); return; }
+  sceneLayout=candidate; ++sceneLayoutRevision;
+  if(controlHandler) controlHandler("refresh",0);
+  JsonDocument doc; doc["ok"]=true; doc["persisted"]=true; replyJson(200,doc);
 }
 
 static bool validPercent(float value) {
@@ -848,6 +903,7 @@ static void receiveTelemetry() {
 static void fillStatus(JsonDocument &doc) {
   doc["version"] = MEO_VERSION;
   doc["state_revision"] = stateRevision;
+  doc["scene_layout_revision"] = sceneLayoutRevision;
   doc["state_boot_id"] = stateBootId;
   doc["device"] = "MEO DESK";
   doc["api_version"] = 1;
@@ -875,6 +931,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("performance_lab_v1");
   capabilities.add("device_profile_v1");
   capabilities.add("focus_config_v1");
+  capabilities.add("widget_scene_v1");
   doc["state_ws_port"] = 81;
   if (meoOta.available()) capabilities.add("ota_local_ab_v1");
   if (catPack.available()) capabilities.add("catpack_ab_v1");
@@ -1487,7 +1544,12 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
     DeviceProfile canonical;
     const String data = prefs.getString("profile_v1", "");
     if (data.length() && !deserializeJson(stored, data) && stored["schema"] == DeviceProfile::SCHEMA &&
-        decodeProfile(stored["profile"].as<JsonObjectConst>(), canonical)) deviceProfile = canonical;
+        decodeProfile(stored["profile"].as<JsonObjectConst>(), canonical)) {
+      SceneLayout savedLayout;
+      if(stored["scene_layout"].isNull() || decodeLayout(stored["scene_layout"].as<JsonObjectConst>(),savedLayout)) {
+        deviceProfile=canonical; sceneLayout=savedLayout;
+      }
+    }
     const String history = prefs.getString("ota_history", "[]");
     if (history.length() > 4096 || deserializeJson(otaHistory, history) || !otaHistory.is<JsonArray>() || otaHistory.size() > 6)
       otaHistory.to<JsonArray>();
@@ -1538,6 +1600,8 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/focus/config", HTTP_POST, configureFocus);
   httpServer.on("/api/v1/config", HTTP_GET, exportConfiguration);
   httpServer.on("/api/v1/config", HTTP_POST, importConfiguration);
+  httpServer.on("/api/v1/scene-layout", HTTP_GET, exportSceneLayout);
+  httpServer.on("/api/v1/scene-layout", HTTP_POST, importSceneLayout);
   httpServer.on("/api/commands", HTTP_GET, sendCommands);
   httpServer.on("/api/commands/ack", HTTP_POST, ackCommand);
   httpServer.on("/api/v1/commands", HTTP_GET, sendCommands);

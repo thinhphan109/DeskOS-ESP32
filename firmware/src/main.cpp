@@ -12,6 +12,7 @@
 #include "core/card_refresh.h"
 #include "core/performance_lab.h"
 #include "core/widget_contract.h"
+#include "render/widget_renderer.h"
 
 static PerformanceLab performanceLab;
 #include "ota_manager.h"
@@ -85,7 +86,7 @@ bool psramAvailable = false;
 enum Page : uint8_t {
   PC_PAGE, CLOCK_PAGE, FOCUS_PAGE, NETWORK_PAGE, SYSTEM_PAGE,
   MUSIC_PAGE, PRINTER_PAGE, AUDIO_PAGE, MOTO_PAGE,
-  SLEEP_PAGE, HEALTH_PAGE, TRENDS_PAGE, HOME_PAGE, PC_NETWORK_PAGE, PAGE_COUNT
+  SLEEP_PAGE, HEALTH_PAGE, TRENDS_PAGE, HOME_PAGE, PC_NETWORK_PAGE, CUSTOM_PAGE, PAGE_COUNT
 };
 
 Page currentPage = HOME_PAGE;
@@ -238,6 +239,7 @@ void ring(int x, int y, int r, int percentage) {
 
 const char *pageName(Page page) {
   switch (page) {
+    case CUSTOM_PAGE: return "MY WIDGET DESK";
     case HOME_PAGE:    return "HELLO, HUMAN";
     case PC_NETWORK_PAGE: return "PC NETWORK";
     case PC_PAGE:      return "PC MONITOR";
@@ -258,6 +260,7 @@ const char *pageName(Page page) {
 
 const char *sceneLabel(Page page) {
   switch (page) {
+    case CUSTOM_PAGE: return "WIDGETS";
     case HOME_PAGE: return "HOME";
     case PC_PAGE: return "PC";
     case MUSIC_PAGE: return "MUSIC";
@@ -317,6 +320,7 @@ const uint16_t *builtinForPage(Page page) {
     case PC_PAGE:
     case HEALTH_PAGE:
     case TRENDS_PAGE: return petSprite();
+    case CUSTOM_PAGE:
     case HOME_PAGE:    return petSprite();
     case PC_NETWORK_PAGE: return cat_network;
     case CLOCK_PAGE:   return cat_clock;
@@ -340,7 +344,7 @@ const uint16_t *catForPage(Page page) {
 
 bool pageHasRealData(Page page) {
   if (page == PC_PAGE || page == HEALTH_PAGE || page == TRENDS_PAGE ||
-      page == HOME_PAGE || page == PC_NETWORK_PAGE)
+      page == HOME_PAGE || page == PC_NETWORK_PAGE || page == CUSTOM_PAGE)
     return pcTelemetryFresh() && !pcTelemetry.demo;
   if (page == CLOCK_PAGE) {
     tm local{};
@@ -537,6 +541,16 @@ void drawCard() {
   const uint32_t seconds = nowMs / 1000;
 
   switch (currentPage) {
+    case CUSTOM_PAGE: {
+      WidgetSnapshot data;
+      tm local{};
+      if (realClock(local)) strftime(data.clock,sizeof(data.clock),"%H:%M:%S",&local);
+      if (pcTelemetryFresh()) { data.cpu=pcTelemetry.cpuPercent; data.gpu=pcTelemetry.gpuPercent; data.ram=pcTelemetry.ramPercent; data.down=pcTelemetry.netDownKbps; }
+      data.focusSeconds=focusTimer.remainingSeconds(nowMs);
+      if (pcMedia.fresh(nowMs) && pcMedia.available) data.track=pcMedia.title;
+      drawWidgetScene(*surface,pcBridgeSceneLayout(),data,CARD_X-surfaceOriginX,CARD_Y-surfaceOriginY,INK,MUTED,TRACK);
+      break;
+    }
     case HOME_PAGE: {
       tm local{};
       const bool validTime = realClock(local);
@@ -1479,7 +1493,7 @@ void loop() {
     lastCatMs = millis();
   }
   const uint32_t cardNow = millis(); // Cat rendering above can consume 25+ ms in Midnight.
-  const bool clockPage = currentPage == CLOCK_PAGE || currentPage == HOME_PAGE || currentPage == FOCUS_PAGE;
+  const bool clockPage = currentPage == CLOCK_PAGE || currentPage == HOME_PAGE || currentPage == FOCUS_PAGE || currentPage == CUSTOM_PAGE;
   const WidgetSpec cardWidget{{CARD_X, CARD_Y, CARD_W, CARD_H}, cardIntervalMs(currentPage), clockPage};
   constexpr RenderSurfaceInfo renderSurface{320, 240, 16, true};
   if (renderSurface.accepts(cardWidget.region) && CardRefresh::due(cardNow, lastCardMs, cardWidget.refreshMs,

@@ -42,3 +42,7 @@ also needs a real audio input/analysis path; `playing:true` alone is not beat.
 
 Security/eFuse/bootloader changes are deferred at the user's request. Keep the
 existing local update workflow simple while measuring and debugging.
+
+## v2.0 source checkpoint
+
+Widget scene ID 14, bounded snapshot renderer and atomic layout/profile persistence are implemented. See [UI Engine](UI_ENGINE_V20.md). Drag-and-drop tooling is the next source milestone; physical acceptance remains deferred.

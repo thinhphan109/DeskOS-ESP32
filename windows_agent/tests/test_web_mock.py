@@ -77,7 +77,7 @@ class WebMockTests(unittest.TestCase):
             with direct.open(base + "/api/status") as response:
                 status = json.load(response)
             self.assertTrue(status["demo"])
-            self.assertEqual(status["page_count"], 14)
+            self.assertEqual(status["page_count"], 15)
             self.assertEqual(status["version"], VERSION + "-mock")
             self.assertEqual(status["motion_style"], 1)
             self.assertEqual(status["motion_pc_intensity"], 0)

@@ -687,7 +687,7 @@ class MainWindow(QMainWindow):
         self.scene_names = [(12, "Home"), (0, "PC"), (1, "Đồng hồ"), (2, "Focus"),
                             (3, "Wi-Fi"), (4, "Thiết bị"), (5, "Nhạc"), (6, "Print"),
                             (7, "Audio"), (8, "Moto"), (9, "Ngủ"), (10, "Health"),
-                            (11, "Trends"), (13, "Network")]
+                            (11, "Trends"), (13, "Network"), (14, "Widgets")]
         for page, caption in self.scene_names:
             self.studio_scene.addItem(caption, page)
         self.studio_scene.activated.connect(lambda _: self.send_device_control("page", self.studio_scene.currentData()))

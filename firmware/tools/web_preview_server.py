@@ -21,6 +21,8 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / "windows_agent"))
 from device_config import validate_backup
+from scene_layout import DEFAULT_LAYOUT, validate_layout
+import copy
 from app_version import VERSION
 HEADER = (ROOT / "src" / "web_ui.h").read_text(encoding="utf-8")
 MATCH = re.search(r'R"MEODESK\((.*?)\)MEODESK"', HEADER, re.DOTALL)
@@ -39,7 +41,7 @@ def current_web() -> bytes:
 START = time.monotonic()
 MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", "hotspot"]
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
-STATE = {"page": 12, "motion": True, "auto_pages": False, "focus_running": False,
+STATE = {"scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
          "lab_enabled": False,
          "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
          "scene_slots": [12, 0, 5, 2],
@@ -170,6 +172,8 @@ class Handler(BaseHTTPRequestHandler):
                                "events": [{"seq": 1, "code": "demo", "priority": 0,
                                            "message": "SIMULATED event / not hardware", "age_ms": 2500,
                                            "ttl_ms": 8000}]})
+        if url.path == "/api/v1/scene-layout":
+            return self.reply(STATE["scene_layout"])
         if url.path == "/api/v1/focus":
             focus_step()
             return self.reply({"schema": 1, "focus_running": STATE["focus_running"],
@@ -182,7 +186,7 @@ class Handler(BaseHTTPRequestHandler):
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
             return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1"],
+                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -206,7 +210,7 @@ class Handler(BaseHTTPRequestHandler):
                                "motion_pc_intensity": 0,  # DEMO is NOT real CPU/GPU input.
                                "cat_energy": STATE["pet_energy"],
                                "scene_slots": STATE["scene_slots"], "artwork_ready": False,
-                               "page": STATE["page"], "page_count": 14,
+                               "scene_layout_revision": STATE["scene_layout_revision"], "page": STATE["page"], "page_count": 15,
                                "media_available": True, "media_playing": True,
                                "command_pending": False, "command_seq": STATE["command_seq"],
                                "command_acknowledged": STATE["command_acknowledged"],
@@ -232,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/v1/config":
             profile = {key: STATE[key] for key in ("theme", "fps_profile", "motion_style", "motion", "auto_pages", "focus_work_min", "focus_break_min", "focus_goal")}
             profile.update(STATE["settings"], scene_slots=list(STATE["scene_slots"]))
-            return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8", "firmware_version": VERSION + "-mock", "profile": profile})
+            return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8", "firmware_version": VERSION + "-mock", "profile": profile, "scene_layout": STATE["scene_layout"]})
         if url.path == "/api/v1/ota/history":
             return self.reply({"schema": 1, "updates": [], "mode": "demo"})
         return self.reply({"ok": False, "error": "not found"}, 404)
@@ -247,12 +251,20 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 2000)))
             if self.path == "/api/v1/config":
-                clean = validate_backup(data)["profile"]
+                backup = validate_backup(data)
+                clean = backup["profile"]
+                if "scene_layout" in backup:
+                    STATE["scene_layout"] = backup["scene_layout"]
+                    STATE["scene_layout_revision"] += 1
                 for key in ("theme", "fps_profile", "motion_style", "motion", "auto_pages", "focus_work_min", "focus_break_min", "focus_goal"):
                     STATE[key] = clean[key]
                 STATE["scene_slots"] = clean["scene_slots"]
                 STATE["settings"].update({key: clean[key] for key in STATE["settings"]})
                 STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=clean["focus_work_min"]*60)
+                return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+            if self.path == "/api/v1/scene-layout":
+                STATE["scene_layout"] = validate_layout(data)
+                STATE["scene_layout_revision"] += 1
                 return self.reply({"ok": True, "persisted": False, "mode": "demo"})
             if self.path == "/api/v1/focus/config":
                 work, rest, goal = data.get("work_min"), data.get("break_min"), data.get("goal")
@@ -267,10 +279,10 @@ class Handler(BaseHTTPRequestHandler):
                 if action == "preview" and 0 <= value < len(MOODS):
                     STATE["preview"] = value
                     STATE["preview_until"] = time.monotonic() + 8
-                elif action == "page" and 0 <= value < 14:
+                elif action == "page" and 0 <= value < 15:
                     STATE["page"] = value
                 elif action == "next":
-                    STATE["page"] = (STATE["page"] + 1) % 14
+                    STATE["page"] = (STATE["page"] + 1) % 15
                 elif action in ("motion", "auto"):
                     field = {"motion": "motion", "auto": "auto_pages"}[action]
                     STATE[field] = not STATE[field]
@@ -288,7 +300,7 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["pet_energy"] = min(100, STATE["pet_energy"] + 8)
                     STATE["pet_until"] = time.monotonic() + 8
                 elif isinstance(action, str) and action.startswith("scene_") and \
-                        len(action) == 7 and action[6] in "0123" and 0 <= value < 14:
+                        len(action) == 7 and action[6] in "0123" and 0 <= value < 15:
                     index = int(action[6])
                     if value in STATE["scene_slots"] and STATE["scene_slots"][index] != value:
                         return self.reply({"ok": False, "error": "duplicate favorite"}, 400)

@@ -14,6 +14,14 @@ def backup():
         "cpu_limit": 88, "gpu_limit": 92, "temp_limit": 80, "battery_limit": 20}}
 
 class ConfigTests(unittest.TestCase):
+    def test_layout_backup_and_legacy_restore(self):
+        from scene_layout import DEFAULT_LAYOUT
+        data = backup()
+        data["profile"]["scene_slots"][0] = 14
+        data["scene_layout"] = DEFAULT_LAYOUT
+        self.assertEqual(device_config.validate_backup(data), data)
+        data["scene_layout"] = {"schema": 1, "widgets": []}
+        with self.assertRaises(ValueError): device_config.validate_backup(data)
     def test_roundtrip_and_excluded_envelope_secrets(self):
         data = backup(); data["key"] = "PRIVATE"; data["wifi_password"] = "PRIVATE"
         with tempfile.TemporaryDirectory() as folder:
