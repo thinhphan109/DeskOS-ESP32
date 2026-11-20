@@ -1,0 +1,41 @@
+name: Source and firmware checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install psutil Pillow
+      - run: python -m unittest discover -s windows_agent/tests -q
+      - name: Native domain tests
+        run: |
+          for test in domain motion_director card_refresh performance_lab device_profile; do
+            g++ -std=c++17 -Wall -Wextra -Werror firmware/tools/test_${test}.cpp -o /tmp/meodesk-${test}
+            /tmp/meodesk-${test}
+          done
+          g++ -std=c++17 -Wall -Wextra -Werror -I firmware/tools/ota_stubs -I firmware/src firmware/src/ota_manager.cpp firmware/tools/test_ota_manager.cpp -lcrypto -o /tmp/meodesk-ota
+          /tmp/meodesk-ota
+          g++ -std=c++17 -Wall -Wextra -Werror -I firmware/tools/ota_stubs -I firmware/src firmware/src/cat_pack.cpp firmware/src/cat_assets.cpp firmware/tools/test_cat_pack.cpp -lcrypto -o /tmp/meodesk-catpack
+          /tmp/meodesk-catpack
+      - name: Browser state tests
+        run: |
+          node firmware/tools/test_web_sha.js
+          node firmware/tools/test_web_boot.js
+          node firmware/tools/test_web_catpack.js
+          node firmware/tools/test_web_sync.js
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install platformio
+      - run: cp firmware/src/app_config.example.h firmware/src/app_config.h
+      - run: pio run -d firmware

@@ -2,6 +2,15 @@
 
 Date: 2026-11-20 (Vietnam time). Target: ESP32-S3 WROOM-1 N16R8.
 
+## 1.9.0-dev profile and update follow-up
+
+81 Python tests passed, including GUI and mock config/Focus flows; native
+profile/configurable-Focus/atomic-scene-swap tests and browser state suites
+passed. The local preview exercised a 50/10/6 plan. Full PlatformIO build
+succeeded. Physical NVS restore/OTA/clock/FPS checks remain deferred.
+The public v1.8 GitHub Windows CI also completed successfully and packaged
+Companion. See `CONFIG_AND_OTA_V19.md` for this source milestone's scope.
+
 ## Initial Performance Lab source follow-up
 
 The combined Studio + Lab build succeeded (57,780 bytes static RAM,

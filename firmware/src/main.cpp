@@ -6,6 +6,7 @@
 #include <time.h>
 #include <string.h>
 #include "display_config.h"
+#include "app_version.h"
 #include "cat_assets.h"
 #include "pc_bridge.h"
 #include "core/card_refresh.h"
@@ -366,7 +367,7 @@ void drawPageFrame() {
   tft.fillRoundRect(9, 7, 226, 30, 15, PAPER);
   tft.fillCircle(19, 22, 3, CORAL);
   label("mimi.", 30, 12, CORAL, 2);
-  label(nightPalette ? "MIDNIGHT / 1.8 DEV" : "DESK OS / 1.8 DEV", 100, 18, MUTED);
+  label(String(nightPalette ? "NIGHT / " : "DESK / ") + MEO_VERSION, 100, 18, MUTED);
   drawHeaderStatus();
 
   label(pageName(currentPage), 14, 45, INK, 2);
@@ -685,9 +686,11 @@ void drawCard() {
       char timer[16];
       snprintf(timer, sizeof(timer), "%02lu:%02lu",
                (unsigned long)(remain / 60), (unsigned long)(remain % 60));
-      label(focusTimer.phase() == FocusTimer::BREAK ? "YOUR BREAK / 5 MIN" :
-            focusTimer.running() ? "STAY IN YOUR ZONE" : "READY TO FOCUS",
-            19, 88, MUTED);
+      char phaseLabel[32];
+      snprintf(phaseLabel, sizeof(phaseLabel), "%s / %u MIN",
+               focusTimer.phase() == FocusTimer::BREAK ? "BREAK" : "FOCUS",
+               static_cast<unsigned>(focusTimer.phase() == FocusTimer::BREAK ? focusTimer.breakMinutes() : focusTimer.workMinutes()));
+      label(phaseLabel, 19, 88, MUTED);
       headline(timer, 17, 128, &lgfx::fonts::FreeSansBold24pt7b);
       bar(19, 143, 137, 9, 100 - (int)(remain * 100 / total), TRACK,
           focusTimer.phase() == FocusTimer::BREAK ? TEAL : CORAL);
@@ -1109,6 +1112,19 @@ void setOtaDisplay(int percent) {drawUploadDisplay(percent, "UPDATING FIRMWARE")
 void setCatPackDisplay(int percent) {drawUploadDisplay(percent, "UPDATING CATS");}
 
 bool webControl(const String &action, int value) {
+  if (action == "profile") {
+    const DeviceProfile &p = pcBridgeProfile();
+    themeChoice = p.theme;
+    applyFpsProfile(p.fps);
+    motionDirector.setStyle(p.style);
+    catMotion = p.motion; autoPages = p.autoPages;
+    scenes.configureAll(p.scenes);
+    focusTimer.configure(p.workMin, p.breakMin, p.goal);
+    pcBridgeSetFocus(focusTimer.running() && focusTimer.phase() == FocusTimer::WORK);
+    applyPalette(themeShouldBeNight());
+    if (!colorTestActive && !otaScreenActive) setPage(currentPage);
+    return true;
+  }
   if (action == "perf_trace") {
     if (value != 0 && value != 1) return false;
     performanceLab.setEnabled(value == 1, millis());
@@ -1259,6 +1275,10 @@ void webUiStatus(JsonDocument &doc) {
   doc["focus_phase"] = focusTimer.phase() == FocusTimer::WORK ? "work" : "break";
   doc["focus_remaining_s"] = focusTimer.remainingSeconds(millis());
   doc["focus_sessions"] = focusTimer.sessionsDone();
+  doc["focus_work_min"] = focusTimer.workMinutes();
+  doc["focus_break_min"] = focusTimer.breakMinutes();
+  doc["focus_goal"] = focusTimer.goal();
+  doc["focus_duration_s"] = focusTimer.durationMs() / 1000UL;
   doc["cat_fps"] = measuredCatFps;
   doc["fps_profile"] = fpsProfile;
   doc["fps_target"] = catPacer.fps();
@@ -1356,10 +1376,7 @@ void setup() {
   applyFpsProfile(pcBridgeFpsProfile());
   motionDirector.setStyle(pcBridgeMotionStyle());
   applyPalette(themeShouldBeNight());
-  for (uint8_t slot = 0; slot < SceneManager::SLOTS; ++slot) {
-    uint8_t page = 255;
-    if (pcBridgeLoadSceneSlot(slot, page)) scenes.configure(slot, page);
-  }
+  webControl("profile", 0);
 
   showHelp();
   setPage(HOME_PAGE);

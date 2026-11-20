@@ -2,6 +2,7 @@ name: Windows Companion
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'windows_agent/**'
       - 'packaging/windows/**'

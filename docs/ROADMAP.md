@@ -9,6 +9,10 @@ version labels are planning milestones, not completed releases.
   readiness, 16 MiB Flash, 8 MiB PSRAM and device-reported ~25 FPS history.
 - Source/dev build: compact Personal Studio, shared WebSocket state,
   bounded Midnight clock refresh and initial Performance Lab instrumentation.
+- v1.8 source checkpoint is committed/pushed as `v1.8.0-dev`. The v1.9
+  configuration/manifest/Focus follow-up is documented in `CONFIG_AND_OTA_V19.md`.
+- Owner authorizes direct Git push after each tested source version; deployment
+  remains deferred until the larger software pass is reviewed.
 - Deployment choice: keep the build and preview; no OTA authorized/performed.
 - Music metadata/cover art/transport, PC metrics, Focus, motion priorities and
   FPS history already exist. Their later milestones mean refinement and

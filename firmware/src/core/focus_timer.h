@@ -12,7 +12,16 @@ class FocusTimer {
   bool running() const { return running_; }
   Phase phase() const { return phase_; }
   uint16_t sessionsDone() const { return sessionsDone_; }
-  uint32_t durationMs() const { return phase_ == WORK ? 1500000UL : 300000UL; }
+  uint32_t durationMs() const { return (phase_ == WORK ? workMin_ : breakMin_) * 60000UL; }
+  uint16_t workMinutes() const { return workMin_; }
+  uint16_t breakMinutes() const { return breakMin_; }
+  uint16_t goal() const { return goal_; }
+  bool configure(uint16_t workMin, uint16_t breakMin, uint16_t goal) {
+    if (workMin < 1 || workMin > 180 || breakMin < 1 || breakMin > 60 || goal < 1 || goal > 24) return false;
+    if (workMin != workMin_ || breakMin != breakMin_) reset();
+    workMin_ = workMin; breakMin_ = breakMin; goal_ = goal;
+    return true;
+  }
 
   uint32_t elapsedMs(uint32_t nowMs) const {
     return elapsedMs_ + (running_ ? (uint32_t)(nowMs - startedMs_) : 0);
@@ -71,4 +80,5 @@ class FocusTimer {
   uint32_t elapsedMs_ = 0;
   uint32_t startedMs_ = 0;
   uint16_t sessionsDone_ = 0;
+  uint16_t workMin_ = 25, breakMin_ = 5, goal_ = 4;
 };

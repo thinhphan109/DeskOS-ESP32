@@ -10,6 +10,10 @@ from companion_core import wire_media
 
 
 class ContractTests(unittest.TestCase):
+    def test_python_and_firmware_versions_match(self):
+        version = (ROOT / 'windows_agent/app_version.py').read_text().split('"')[1]
+        header = (ROOT / 'firmware/src/app_version.h').read_text()
+        self.assertIn('"'+version+'"', header)
     def test_ota_16mb_partition_layout(self):
         """Boot, NVS and two independent 6 MiB slots must never overlap."""
         csv = ROOT / "firmware" / "meodesk_ota_16mb.csv"

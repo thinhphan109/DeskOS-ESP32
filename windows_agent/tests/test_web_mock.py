@@ -3,16 +3,44 @@
 import json
 import sys
 import threading
+import copy
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.request import ProxyHandler, Request, build_opener
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "firmware"))
-from tools.web_preview_server import Handler  # noqa: E402
+from tools.web_preview_server import Handler, VERSION, STATE  # noqa: E402
 
 
 class WebMockTests(unittest.TestCase):
+    def test_config_restore_and_focus_plan_validate_before_commit(self):
+        saved = copy.deepcopy(STATE)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True); worker.start()
+        direct = build_opener(ProxyHandler({}))
+        base = f"http://127.0.0.1:{server.server_port}"
+        def read(path):
+            with direct.open(base+path) as response: return json.load(response)
+        def post(path, data):
+            request = Request(base+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'},method='POST')
+            with direct.open(request) as response: return json.load(response)
+        try:
+            self.assertFalse(post('/api/v1/focus/config',{'work_min':50,'break_min':10,'goal':6})['persisted'])
+            status = read('/api/status')
+            self.assertEqual(status['focus_duration_s'],3000)
+            data = read('/api/v1/config'); data['profile']['scene_slots']=[0,12,2,5]
+            self.assertTrue(post('/api/v1/config',data)['ok'])
+            self.assertEqual(read('/api/v1/config')['profile']['scene_slots'],[0,12,2,5])
+            data['profile']['scene_slots']=[0,0,2,5]
+            from urllib.error import HTTPError
+            with self.assertRaises(HTTPError): post('/api/v1/config',data)
+            self.assertEqual(read('/api/v1/config')['profile']['scene_slots'],[0,12,2,5])
+            self.assertEqual(read('/api/v1/ota/history')['updates'],[])
+        finally:
+            STATE.clear(); STATE.update(saved)
+            server.shutdown(); server.server_close(); worker.join(timeout=2)
+
     def test_dashboard_history_and_preview_controls(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         worker = threading.Thread(target=server.serve_forever, daemon=True)
@@ -50,7 +78,7 @@ class WebMockTests(unittest.TestCase):
                 status = json.load(response)
             self.assertTrue(status["demo"])
             self.assertEqual(status["page_count"], 14)
-            self.assertEqual(status["version"], "1.7.0-mock")
+            self.assertEqual(status["version"], VERSION + "-mock")
             self.assertEqual(status["motion_style"], 1)
             self.assertEqual(status["motion_pc_intensity"], 0)
             with direct.open(base + "/api/v1/ota/status") as response:

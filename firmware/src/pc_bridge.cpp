@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "app_config.h"
+#include "app_version.h"
 #include "cat_assets.h"
 #include "mood_filter.h"
 #include "core/mood_engine.h"
@@ -54,9 +55,15 @@ static uint32_t stateRevision = 0;
 static uint32_t statePublishedMs = 0;
 static bool stateDirty = true;
 static String stateBootId;
+static JsonDocument otaHistory;
+static bool otaHistoryPending = false;
+static uint32_t otaHistoryCheckMs = 0;
 static bool stateAuthorized[4] = {};
 static Preferences prefs;
 static bool prefsReady = false;
+static DeviceProfile deviceProfile;
+const DeviceProfile &pcBridgeProfile() { return deviceProfile; }
+static bool persistProfile(const DeviceProfile &profile);
 static UiControlCallback controlHandler = nullptr;
 static UiStatusCallback statusHandler = nullptr;
 static UiPerformanceCallback performanceHandler = nullptr;
@@ -156,11 +163,8 @@ bool pcTelemetryFresh() {
 bool pcNetworkConnected() { return WiFi.status() == WL_CONNECTED; }
 
 bool pcBridgeLoadSceneSlot(uint8_t slot, uint8_t &page) {
-  if (!prefsReady || slot >= 4) return false;
-  char key[5];
-  snprintf(key, sizeof(key), "sc%u", (unsigned)slot);
-  if (!prefs.isKey(key)) return false;
-  page = prefs.getUChar(key, 255);
+  if (slot >= 4) return false;
+  page = deviceProfile.scenes[slot];
   return true;
 }
 
@@ -168,7 +172,9 @@ bool pcBridgeSaveSceneSlot(uint8_t slot, uint8_t page) {
   if (!prefsReady || slot >= 4 || page >= 14) return false;
   char key[5];
   snprintf(key, sizeof(key), "sc%u", (unsigned)slot);
-  return prefs.putUChar(key, page) == 1;
+  deviceProfile.scenes[slot] = page;
+  prefs.putUChar(key, page);
+  return persistProfile(deviceProfile);
 }
 
 // The Wi-Fi event callback runs on another FreeRTOS task. Only record the
@@ -223,7 +229,9 @@ uint8_t pcBridgeTheme() { return savedTheme; }
 bool pcBridgeSaveTheme(uint8_t theme) {
   if (theme > 2) return false;
   savedTheme = theme;
-  return prefsReady && prefs.putUChar("theme", theme) == 1;
+  deviceProfile.theme = theme;
+  if (prefsReady) prefs.putUChar("theme", theme);
+  return persistProfile(deviceProfile);
 }
 
 uint8_t pcBridgeFpsProfile() { return savedFpsProfile; }
@@ -231,7 +239,9 @@ uint8_t pcBridgeFpsProfile() { return savedFpsProfile; }
 bool pcBridgeSaveFpsProfile(uint8_t profile) {
   if (profile > 3) return false;
   savedFpsProfile = profile;
-  return prefsReady && prefs.putUChar("fps", profile) == 1;
+  deviceProfile.fps = profile;
+  if (prefsReady) prefs.putUChar("fps", profile);
+  return persistProfile(deviceProfile);
 }
 
 uint8_t pcBridgeMotionStyle() { return savedMotionStyle; }
@@ -239,7 +249,9 @@ uint8_t pcBridgeMotionStyle() { return savedMotionStyle; }
 bool pcBridgeSaveMotionStyle(uint8_t style) {
   if (style > 2) return false;
   savedMotionStyle = style;
-  return prefsReady && prefs.putUChar("motionstyle", style) == 1;
+  deviceProfile.style = style;
+  if (prefsReady) prefs.putUChar("motionstyle", style);
+  return persistProfile(deviceProfile);
 }
 
 static const char *rawEmotionName() {
@@ -323,6 +335,42 @@ static void replyJson(int code, JsonDocument &data) {
   httpServer.send(code, "application/json; charset=utf-8", response);
 }
 
+static void saveOtaHistory() {
+  if (!prefsReady) return;
+  String data; serializeJson(otaHistory, data);
+  prefs.putString("ota_history", data);
+}
+
+static void recordOtaUpload() {
+  JsonArray list = otaHistory.as<JsonArray>();
+  if (list.isNull()) list = otaHistory.to<JsonArray>();
+  if (list.size() >= 6) list.remove(0);
+  JsonObject item = list.add<JsonObject>();
+  const esp_partition_t *target = esp_ota_get_next_update_partition(nullptr);
+  item["phase"] = "uploaded"; item["version_before"] = MEO_VERSION;
+  item["sha256"] = httpServer.header("X-MEO-OTA-SHA256");
+  item["target_slot"] = target ? target->label : "N/A";
+  item["uptime_ms"] = millis();
+  saveOtaHistory();
+}
+
+static void settleOtaHistory(uint32_t now) {
+  if (!otaHistoryPending || now < 25000UL || static_cast<uint32_t>(now - otaHistoryCheckMs) < 1000UL) return;
+  otaHistoryCheckMs = now;
+  JsonArray list = otaHistory.as<JsonArray>();
+  if (list.size() == 0) { otaHistoryPending = false; return; }
+  JsonObject item = list[list.size()-1];
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  const char *health = meoOta.bootHealth();
+  if (running && item["target_slot"] == running->label && !strcmp(health, "passed")) {
+    item["phase"] = "confirmed"; item["version_after"] = MEO_VERSION;
+  } else if (!strcmp(health, "failed")) item["phase"] = "failed_health";
+  else if (now >= 35000UL && running && item["target_slot"] != running->label) item["phase"] = "unconfirmed_slot";
+  else return;
+  otaHistoryPending = false;
+  saveOtaHistory();
+}
+
 static void replyError(int code, const char *message) {
   JsonDocument body;
   body["ok"] = false;
@@ -330,10 +378,124 @@ static void replyError(int code, const char *message) {
   replyJson(code, body);
 }
 
+static void encodeProfile(JsonObject out, const DeviceProfile &p) {
+  out["theme"] = p.theme; out["fps_profile"] = p.fps; out["motion_style"] = p.style;
+  out["motion"] = p.motion; out["auto_pages"] = p.autoPages; out["quiet"] = p.quiet;
+  out["focus_work_min"] = p.workMin; out["focus_break_min"] = p.breakMin; out["focus_goal"] = p.goal;
+  out["cpu_limit"] = p.cpu; out["gpu_limit"] = p.gpu;
+  out["temp_limit"] = p.temperature; out["battery_limit"] = p.battery;
+  JsonArray scenes = out["scene_slots"].to<JsonArray>();
+  for (uint8_t i = 0; i < 4; ++i) scenes.add(p.scenes[i]);
+}
+
+static bool decodeProfile(JsonObjectConst in, DeviceProfile &p) {
+  const char *numbers[] = {"theme", "fps_profile", "motion_style", "focus_work_min",
+    "focus_break_min", "focus_goal", "cpu_limit", "gpu_limit", "temp_limit", "battery_limit"};
+  for (const char *name : numbers)
+    if (!in[name].is<int>() || in[name].as<int>() < 0 || in[name].as<int>() > 255) return false;
+  if (!in["motion"].is<bool>() || !in["auto_pages"].is<bool>() || !in["quiet"].is<bool>() ||
+      !in["scene_slots"].is<JsonArrayConst>() || in["scene_slots"].size() != 4) return false;
+  p.theme = in["theme"]; p.fps = in["fps_profile"]; p.style = in["motion_style"];
+  p.workMin = in["focus_work_min"]; p.breakMin = in["focus_break_min"]; p.goal = in["focus_goal"];
+  p.cpu = in["cpu_limit"]; p.gpu = in["gpu_limit"]; p.temperature = in["temp_limit"]; p.battery = in["battery_limit"];
+  p.motion = in["motion"]; p.autoPages = in["auto_pages"]; p.quiet = in["quiet"];
+  for (uint8_t i = 0; i < 4; ++i) {
+    if (!in["scene_slots"][i].is<int>() || in["scene_slots"][i].as<int>() < 0 ||
+        in["scene_slots"][i].as<int>() >= 14) return false;
+    p.scenes[i] = in["scene_slots"][i];
+  }
+  return p.valid();
+}
+
+static bool persistProfile(const DeviceProfile &profile) {
+  if (!prefsReady || !profile.valid()) return false;
+  JsonDocument doc; doc["schema"] = DeviceProfile::SCHEMA;
+  encodeProfile(doc["profile"].to<JsonObject>(), profile);
+  String data; serializeJson(doc, data);
+  // One NVS value: a failed write cannot partially restore individual fields.
+  if (prefs.getString("profile_v1", "") == data) return true;
+  return prefs.putString("profile_v1", data) == data.length();
+}
+
+static void applyProfileMetadata() {
+  savedTheme = deviceProfile.theme; savedFpsProfile = deviceProfile.fps; savedMotionStyle = deviceProfile.style;
+  healthSettings.cpuLimit = deviceProfile.cpu; healthSettings.gpuLimit = deviceProfile.gpu;
+  healthSettings.tempLimit = deviceProfile.temperature; healthSettings.batteryLimit = deviceProfile.battery;
+  healthSettings.quiet = deviceProfile.quiet;
+}
+
+static void captureRuntimeProfile() {
+  if (statusHandler) {
+    JsonDocument status; statusHandler(status);
+    deviceProfile.motion = status["motion"] | true;
+    deviceProfile.autoPages = status["auto_pages"] | false;
+  }
+  deviceProfile.cpu = healthSettings.cpuLimit; deviceProfile.gpu = healthSettings.gpuLimit;
+  deviceProfile.temperature = healthSettings.tempLimit; deviceProfile.battery = healthSettings.batteryLimit;
+  deviceProfile.quiet = healthSettings.quiet;
+}
+
 static bool authorized() {
   if (httpServer.header("X-MEO-KEY") == MEO_API_KEY) return true;
   replyError(401, "invalid pairing key");
   return false;
+}
+
+static void exportConfiguration() {
+  if (!authorized()) return;
+  captureRuntimeProfile();
+  JsonDocument doc; doc["schema"] = DeviceProfile::SCHEMA;
+  doc["board"] = MeoOtaManager::BOARD_ID;
+  doc["firmware_version"] = MEO_VERSION;
+  encodeProfile(doc["profile"].to<JsonObject>(), deviceProfile);
+  replyJson(200, doc);
+}
+
+static void sendOtaHistory() {
+  if (!authorized()) return;
+  JsonDocument doc; doc["schema"] = 1; doc["updates"] = otaHistory.as<JsonArray>();
+  replyJson(200, doc);
+}
+
+static void importConfiguration() {
+  if (!authorized()) return;
+  const String payload = httpServer.arg("plain");
+  if (payload.length() == 0 || payload.length() > 2048) { replyError(413, "configuration must be 1..2048 bytes"); return; }
+  JsonDocument input;
+  DeviceProfile candidate;
+  if (deserializeJson(input, payload) || !input["schema"].is<int>() || input["schema"] != DeviceProfile::SCHEMA ||
+      input["board"] != MeoOtaManager::BOARD_ID || !decodeProfile(input["profile"].as<JsonObjectConst>(), candidate)) {
+    replyError(400, "invalid or incompatible configuration"); return;
+  }
+  if (!controlHandler) { replyError(503, "renderer unavailable"); return; }
+  if (!persistProfile(candidate)) { replyError(507, "configuration was not persisted; current settings retained"); return; }
+  deviceProfile = candidate;
+  applyProfileMetadata();
+  controlHandler("profile", 0);
+  JsonDocument result; result["ok"] = true; result["persisted"] = true;
+  replyJson(200, result);
+}
+
+static void configureFocus() {
+  if (!authorized()) return;
+  const String payload = httpServer.arg("plain");
+  JsonDocument input;
+  if (payload.length() > 160 || deserializeJson(input, payload) ||
+      !input["work_min"].is<int>() || !input["break_min"].is<int>() || !input["goal"].is<int>()) {
+    replyError(400, "invalid Focus configuration"); return;
+  }
+  const int work = input["work_min"], rest = input["break_min"], goal = input["goal"];
+  if (work < 1 || work > 180 || rest < 1 || rest > 60 || goal < 1 || goal > 24) {
+    replyError(400, "Focus ranges: work 1..180, break 1..60, goal 1..24"); return;
+  }
+  DeviceProfile candidate = deviceProfile;
+  candidate.workMin = work; candidate.breakMin = rest; candidate.goal = goal;
+  if (!controlHandler || !persistProfile(candidate)) { replyError(507, "Focus configuration not saved"); return; }
+  deviceProfile = candidate;
+  controlHandler("profile", 0);
+  JsonDocument answer; answer["ok"] = true; answer["schema"] = 1;
+  if (statusHandler) statusHandler(answer);
+  replyJson(200, answer);
 }
 
 static bool validPercent(float value) {
@@ -684,7 +846,7 @@ static void receiveTelemetry() {
 }
 
 static void fillStatus(JsonDocument &doc) {
-  doc["version"] = "1.8.0-dev";
+  doc["version"] = MEO_VERSION;
   doc["state_revision"] = stateRevision;
   doc["state_boot_id"] = stateBootId;
   doc["device"] = "MEO DESK";
@@ -711,6 +873,8 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("performance_history_v1");
   capabilities.add("state_websocket_v1");
   capabilities.add("performance_lab_v1");
+  capabilities.add("device_profile_v1");
+  capabilities.add("focus_config_v1");
   doc["state_ws_port"] = 81;
   if (meoOta.available()) capabilities.add("ota_local_ab_v1");
   if (catPack.available()) capabilities.add("catpack_ab_v1");
@@ -972,6 +1136,10 @@ static void handleControl() {
   JsonDocument answer;
   answer["ok"] = true;
   answer["action"] = action;
+  if (action == "motion" || action == "auto") {
+    captureRuntimeProfile();
+    answer["persisted"] = persistProfile(deviceProfile);
+  }
   replyJson(200, answer);
 }
 
@@ -1011,9 +1179,10 @@ static void handleSettings() {
   }
   trackRealMood();
   if (controlHandler) controlHandler("refresh", 0);
+  captureRuntimeProfile();
   JsonDocument answer;
   answer["ok"] = true;
-  answer["persisted"] = prefsReady;
+  answer["persisted"] = persistProfile(deviceProfile);
   replyJson(200, answer);
 }
 
@@ -1092,7 +1261,7 @@ static void sendOtaStatus() {
   JsonDocument doc;
   doc["schema"] = 1;
   doc["board"] = MeoOtaManager::BOARD_ID;
-  doc["version"] = "1.8.0-dev";
+  doc["version"] = MEO_VERSION;
   doc["ready"] = meoOta.available();
   doc["phase"] = meoOta.phaseName();
   doc["message"] = meoOta.message();
@@ -1182,6 +1351,7 @@ static void finishFirmwareUpload() {
   JsonDocument doc;
   doc["ok"] = true;
   doc["verified"] = true;
+  recordOtaUpload();
   doc["rebooting"] = true;
   doc["bytes"] = meoOta.written();
   replyJson(200, doc);
@@ -1302,6 +1472,28 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
     wifiSsid = WIFI_SSID;
     wifiPassword = WIFI_PASSWORD;
   }
+  deviceProfile.theme = savedTheme; deviceProfile.fps = savedFpsProfile; deviceProfile.style = savedMotionStyle;
+  deviceProfile.cpu = healthSettings.cpuLimit; deviceProfile.gpu = healthSettings.gpuLimit;
+  deviceProfile.temperature = healthSettings.tempLimit; deviceProfile.battery = healthSettings.batteryLimit;
+  deviceProfile.quiet = healthSettings.quiet;
+  if (prefsReady) {
+    DeviceProfile migrated = deviceProfile;
+    for (uint8_t i = 0; i < 4; ++i) {
+      char key[5]; snprintf(key, sizeof(key), "sc%u", static_cast<unsigned>(i));
+      migrated.scenes[i] = prefs.getUChar(key, migrated.scenes[i]);
+    }
+    if (migrated.valid()) deviceProfile = migrated;
+    JsonDocument stored;
+    DeviceProfile canonical;
+    const String data = prefs.getString("profile_v1", "");
+    if (data.length() && !deserializeJson(stored, data) && stored["schema"] == DeviceProfile::SCHEMA &&
+        decodeProfile(stored["profile"].as<JsonObjectConst>(), canonical)) deviceProfile = canonical;
+    const String history = prefs.getString("ota_history", "[]");
+    if (history.length() > 4096 || deserializeJson(otaHistory, history) || !otaHistory.is<JsonArray>() || otaHistory.size() > 6)
+      otaHistory.to<JsonArray>();
+    if (otaHistory.size()) otaHistoryPending = otaHistory[otaHistory.size()-1]["phase"] == "uploaded";
+  }
+  applyProfileMetadata();
   WiFi.onEvent(onWifiEvent);
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(MEO_AP_SSID, MEO_AP_PASSWORD);
@@ -1326,6 +1518,7 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/status", HTTP_GET, sendStatus);
   httpServer.on("/api/v1/performance", HTTP_GET, sendPerformanceHistory);
   httpServer.on("/api/v1/ota/status", HTTP_GET, sendOtaStatus);
+  httpServer.on("/api/v1/ota/history", HTTP_GET, sendOtaHistory);
   httpServer.on("/api/v1/ota/upload", HTTP_POST, finishFirmwareUpload, receiveFirmwareUpload);
   httpServer.on("/api/v1/catpack/status", HTTP_GET, sendCatPackStatus);
   httpServer.on("/api/v1/catpack/upload", HTTP_POST, finishCatPackUpload, receiveCatPackUpload);
@@ -1342,6 +1535,9 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/events", HTTP_GET, sendEvents);
   httpServer.on("/api/v1/focus", HTTP_GET, sendFocus);
   httpServer.on("/api/v1/focus", HTTP_POST, receiveFocus);
+  httpServer.on("/api/v1/focus/config", HTTP_POST, configureFocus);
+  httpServer.on("/api/v1/config", HTTP_GET, exportConfiguration);
+  httpServer.on("/api/v1/config", HTTP_POST, importConfiguration);
   httpServer.on("/api/commands", HTTP_GET, sendCommands);
   httpServer.on("/api/commands/ack", HTTP_POST, ackCommand);
   httpServer.on("/api/v1/commands", HTTP_GET, sendCommands);
@@ -1385,6 +1581,7 @@ void pcBridgeLoop() {
     ESP.restart();
   }
   const uint32_t nowMs = millis();
+  settleOtaHistory(nowMs);
   sampleHistory(nowMs);
   if (previewIndex >= 0 && !previewActive()) {
     previewIndex = -1;

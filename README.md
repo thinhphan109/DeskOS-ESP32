@@ -1,5 +1,12 @@
 # MèoDesk v1.7.0 — Living Motion Engine
 
+Public Git checkouts exclude private configuration and firmware binaries.
+Start with [SOURCE_CHECKOUT.md](docs/SOURCE_CHECKOUT.md); private-ZIP notes
+below describe the original archive, not files published in this repository.
+
+The current next source milestone is [1.9.0-dev](docs/CONFIG_AND_OTA_V19.md):
+portable preferences, version-aware OTA verification and configurable Focus.
+
 **Development follow-up: Personal Studio 1.8.0-dev** adds compact Web/Windows
 controls, WebSocket shared state and a Midnight TFT clock scheduling fix.
 See [docs/PERSONAL_STUDIO_V18.md](docs/PERSONAL_STUDIO_V18.md) for the exact

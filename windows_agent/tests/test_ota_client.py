@@ -1,6 +1,7 @@
 """Offline tests for the real streaming upload protocol; no ESP32 required."""
 
 import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -75,6 +76,23 @@ class OtaClientTests(unittest.TestCase):
         self.assertEqual(manifest["sha256"], hashlib.sha256(self.image).hexdigest())
         self.assertIsNone(manifest["signature"])
         self.assertNotIn("pairing_key", manifest)
+
+    def test_adjacent_manifest_matches_before_any_network_request(self):
+        manifest = describe(self.firmware, "1.9.0-dev")
+        path = self.firmware.with_suffix('.manifest.json')
+        path.write_text(json.dumps(manifest))
+        info = ota_client.inspect_firmware(self.firmware)
+        self.assertTrue(info['manifest_checked'])
+        self.assertEqual(info['firmware_version'], '1.9.0-dev')
+        manifest['sha256'] = '0'*64; path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, 'Manifest'):
+            ota_client.inspect_firmware(self.firmware)
+
+    def test_boot_confirmation_rejects_other_version(self):
+        state = {'board':ota_client.BOARD_ID,'ready':True,'running_slot':'app1','boot_health':'passed','version':'1.7.0'}
+        with patch.object(ota_client,'read_ota_status',return_value=state), patch.object(ota_client.time,'sleep'):
+            with self.assertRaisesRegex(OSError,'different'):
+                ota_client.wait_for_boot('192.168.0.107','app1',expected_version='1.9.0-dev')
 
     def test_upload_streams_binary_with_exact_hash_and_auth(self):
         status = {"board": ota_client.BOARD_ID, "ready": True, "phase": "idle",

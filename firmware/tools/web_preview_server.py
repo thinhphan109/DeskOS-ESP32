@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import sys
 import math
 import re
 import time
@@ -18,6 +19,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT.parent / "windows_agent"))
+from device_config import validate_backup
+from app_version import VERSION
 HEADER = (ROOT / "src" / "web_ui.h").read_text(encoding="utf-8")
 MATCH = re.search(r'R"MEODESK\((.*?)\)MEODESK"', HEADER, re.DOTALL)
 if MATCH is None:
@@ -37,6 +41,7 @@ MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", 
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
 STATE = {"page": 12, "motion": True, "auto_pages": False, "focus_running": False,
          "lab_enabled": False,
+         "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
          "scene_slots": [12, 0, 5, 2],
          "pet_energy": 82, "pet_until": 0.0,
          "focus_phase": "work", "focus_remaining_s": 1500, "focus_sessions": 0,
@@ -63,10 +68,10 @@ def focus_step() -> None:
                 if STATE["focus_phase"] == "work":
                     STATE["focus_sessions"] += 1
                     STATE["focus_phase"] = "break"
-                    STATE["focus_remaining_s"] = 300
+                    STATE["focus_remaining_s"] = STATE["focus_break_min"] * 60
                 else:
                     STATE["focus_phase"] = "work"
-                    STATE["focus_remaining_s"] = 1500
+                    STATE["focus_remaining_s"] = STATE["focus_work_min"] * 60
                 STATE["focus_running"] = False
     STATE["focus_mark"] = now
 
@@ -137,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/v1/ota/status":
             # Mock NEVER writes firmware. Display the USB migration requirement.
             return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8",
-                               "version": "1.7.0-mock", "ready": False, "phase": "idle",
+                               "version": VERSION + "-mock", "ready": False, "phase": "idle",
                                "message": "DEMO / no actual flash", "written": 0, "expected": 0,
                                "flash_bytes": 16777216, "inactive_slot_bytes": 0,
                                "boot_health": "passed", "uptime_ms": int(t * 1000),
@@ -176,8 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             cpu, gpu, ram = sample(t)
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
-            return self.reply({"version": "1.7.0-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1"],
+            return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
+                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -213,6 +218,8 @@ class Handler(BaseHTTPRequestHandler):
                                "focus_phase": STATE["focus_phase"],
                                "focus_remaining_s": STATE["focus_remaining_s"],
                                "focus_sessions": STATE["focus_sessions"],
+                               "focus_work_min": STATE["focus_work_min"], "focus_break_min": STATE["focus_break_min"], "focus_goal": STATE["focus_goal"],
+                               "focus_duration_s": STATE["focus_work_min" if STATE["focus_phase"] == "work" else "focus_break_min"] * 60,
                                "theme": STATE["theme"], "night_theme": STATE["theme"] == 1,
                                "cat_fps": effective_fps_target() - 0.3,
                                "fps_profile": STATE["fps_profile"],
@@ -222,6 +229,12 @@ class Handler(BaseHTTPRequestHandler):
                                "internal_ram_kb": 196, "internal_dma_kb": 123,
                                "cat_render_max_ms": 16.8, "cat_frames_skipped": 0,
                                "dma": True})
+        if url.path == "/api/v1/config":
+            profile = {key: STATE[key] for key in ("theme", "fps_profile", "motion_style", "motion", "auto_pages", "focus_work_min", "focus_break_min", "focus_goal")}
+            profile.update(STATE["settings"], scene_slots=list(STATE["scene_slots"]))
+            return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8", "firmware_version": VERSION + "-mock", "profile": profile})
+        if url.path == "/api/v1/ota/history":
+            return self.reply({"schema": 1, "updates": [], "mode": "demo"})
         return self.reply({"ok": False, "error": "not found"}, 404)
 
     def do_POST(self) -> None:
@@ -233,6 +246,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({"ok": False, "error": "mock does not accept real cover uploads"}, 501)
         try:
             data = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 2000)))
+            if self.path == "/api/v1/config":
+                clean = validate_backup(data)["profile"]
+                for key in ("theme", "fps_profile", "motion_style", "motion", "auto_pages", "focus_work_min", "focus_break_min", "focus_goal"):
+                    STATE[key] = clean[key]
+                STATE["scene_slots"] = clean["scene_slots"]
+                STATE["settings"].update({key: clean[key] for key in STATE["settings"]})
+                STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=clean["focus_work_min"]*60)
+                return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+            if self.path == "/api/v1/focus/config":
+                work, rest, goal = data.get("work_min"), data.get("break_min"), data.get("goal")
+                if any(type(v) is not int for v in (work,rest,goal)) or not 1<=work<=180 or not 1<=rest<=60 or not 1<=goal<=24:
+                    return self.reply({"ok":False,"error":"invalid Focus configuration"},400)
+                STATE.update(focus_work_min=work, focus_break_min=rest, focus_goal=goal,
+                             focus_running=False, focus_phase="work", focus_remaining_s=work*60)
+                return self.reply({"ok":True,"persisted":False,"mode":"demo"})
             if self.path == "/api/control":
                 action = data.get("action")
                 value = int(data.get("value", 0))

@@ -42,6 +42,28 @@ def validate_image(path: str | Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def inspect_firmware(path: str | Path) -> dict:
+    """Validate an adjacent manifest if present; legacy bare images still work."""
+    image = Path(path)
+    size, digest = validate_image(image)
+    result = {"size": size, "sha256": digest, "firmware_version": None, "manifest_checked": False}
+    manifest = image.with_suffix(".manifest.json")
+    if not manifest.exists():
+        return result
+    with manifest.open("rb") as file:
+        payload = file.read(65537)
+    if len(payload) > 65536:
+        raise ValueError("Firmware manifest exceeds 64 KiB")
+    data = json.loads(payload)
+    if (not isinstance(data, dict) or data.get("schema") != 1 or data.get("board") != BOARD_ID or
+            type(data.get("size")) is not int or data["size"] != size or data.get("sha256") != digest or
+            data.get("filename", image.name) != image.name or not isinstance(data.get("firmware_version"), str) or
+            not 1 <= len(data["firmware_version"]) <= 40):
+        raise ValueError("Manifest does not match this firmware image, board or version")
+    result.update(firmware_version=data["firmware_version"], manifest_checked=True)
+    return result
+
+
 def read_ota_status(host: str, *, timeout: float = 3.0) -> dict:
     target = normalize_host(host)
     opener = build_opener(ProxyHandler({}))
@@ -64,7 +86,8 @@ def upload_firmware(host: str, pairing_key: str, firmware: str | Path,
     target = normalize_host(host)
     if not isinstance(pairing_key, str) or not pairing_key.strip() or "\n" in pairing_key or "\r" in pairing_key:
         raise ValueError("Nhập pairing key hợp lệ")
-    size, sha256 = validate_image(firmware)
+    image_info = inspect_firmware(firmware)
+    size, sha256 = image_info["size"], image_info["sha256"]
     status = read_ota_status(target)
     if not status.get("ready") or status.get("phase") not in ("idle", "error"):
         raise ValueError("ESP32 chưa sẵn sàng OTA: kiểm tra phân vùng và trạng thái")
@@ -111,6 +134,7 @@ def upload_firmware(host: str, pairing_key: str, firmware: str | Path,
         if response.status != 200 or result.get("ok") is not True or result.get("verified") is not True:
             raise OSError(str(result.get("error") or f"ESP32 rejected OTA (HTTP {response.status})"))
         result["target_slot"] = target_slot
+        result["expected_version"] = image_info["firmware_version"]
         return result
     finally:
         connection.close()
@@ -118,6 +142,7 @@ def upload_firmware(host: str, pairing_key: str, firmware: str | Path,
 
 def wait_for_boot(host: str, target_slot: str, *, timeout_s: float = 85.0,
                   interval_s: float = 2.0,
+                  expected_version: str | None = None,
                   status_callback: Callable[[str], None] | None = None) -> dict:
     """Prove the ESP rebooted into the target slot and passed its startup check.
 
@@ -145,6 +170,8 @@ def wait_for_boot(host: str, target_slot: str, *, timeout_s: float = 85.0,
                 if health == "failed":
                     raise OSError("ESP32 đã khởi động firmware mới nhưng kiểm tra sức khỏe thất bại")
                 if health == "passed" and status.get("ready") is True:
+                    if expected_version and status.get("version") != expected_version:
+                        raise OSError("ESP32 booted a version different from the selected manifest")
                     return status
                 notice = "Đã vào phân vùng mới; đang chờ ESP32 tự kiểm tra khởi động…"
             elif saw_target:

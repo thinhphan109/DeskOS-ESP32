@@ -21,6 +21,14 @@ class SceneManager {
     shortcuts_[index] = page;
     return true;
   }
+  bool configureAll(const uint8_t pages[SLOTS]) {
+    for (uint8_t i = 0; i < SLOTS; ++i) {
+      if (pages[i] >= pageCount_) return false;
+      for (uint8_t j = 0; j < i; ++j) if (pages[i] == pages[j]) return false;
+    }
+    for (uint8_t i = 0; i < SLOTS; ++i) shortcuts_[i] = pages[i];
+    return true;
+  }
 
   uint8_t nextFeatured(uint8_t current) const {
     for (uint8_t i = 0; i < SLOTS; ++i)

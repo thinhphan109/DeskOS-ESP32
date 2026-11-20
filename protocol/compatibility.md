@@ -181,3 +181,11 @@ control action `perf_trace` (0/1). Unknown fields are ignored by old clients.
 Missing/disabled measurements are null. See `../docs/PERFORMANCE_LAB_V18.md`
 for the meaning of CPU/wait spans and the partial pixel-payload coverage.
 
+# 1.9 development additions
+
+`device_profile_v1` provides keyed GET/POST `/api/v1/config`; `focus_config_v1`
+provides keyed POST `/api/v1/focus/config`. Status adds duration/plan/goal
+fields. Keyed GET `/api/v1/ota/history` reports a bounded, best-effort device
+journal. Legacy clients ignore the added fields and retain 25/5 defaults.
+See `../docs/CONFIG_AND_OTA_V19.md` for reset, migration and journal limits.
+

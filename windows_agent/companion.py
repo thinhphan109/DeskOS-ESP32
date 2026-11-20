@@ -19,16 +19,18 @@ from PySide6.QtWebSockets import QWebSocket
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QFileDialog, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton,
+    QFileDialog, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QSpinBox,
     QScrollArea, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 import discovery
 import ota_client
 import catpack_client
+import device_config
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings
 from state_sync import StateCursor, FocusDisplay
+from app_version import VERSION
 
 
 QSS = """
@@ -76,6 +78,7 @@ QPushButton:checked { background: #d8f1e2; border: 1px solid #42866a; color: #1d
 QPushButton:disabled { color: #7d817c; background: #e4e7e0; }
 QComboBox { padding: 7px 10px; background: #fffefa; color: #24312b; border: 1px solid #d3d8ce; border-radius: 7px; min-height: 22px; }
 QComboBox QAbstractItemView { background: #fffefa; color: #24312b; selection-background-color: #d8f1e2; }
+QSpinBox { background: #fffefa; color: #24312b; border: 1px solid #d3d8ce; border-radius: 7px; padding: 7px; }
 QScrollBar:vertical { background: #eeeae3; width: 10px; }
 QScrollBar::handle:vertical { background: #bbb9af; border-radius: 5px; min-height: 24px; }
 """
@@ -158,7 +161,7 @@ class MainWindow(QMainWindow):
         self.bus.discovery.connect(self.update_discovery)
         self.bus.ota.connect(self.update_ota)
         self.bus.catpack.connect(self.update_catpack)
-        self.setWindowTitle("MèoDesk Personal Studio 1.8 dev")
+        self.setWindowTitle("MèoDesk Personal Studio " + VERSION)
         self.setWindowIcon(cat_icon())
         self.resize(1000, 700)
         self.setMinimumSize(790, 530)
@@ -235,7 +238,7 @@ class MainWindow(QMainWindow):
         self.display_timer.start(200)
         if preview:
             self.setWindowTitle("MèoDesk Studio — DEMO / xem trước")
-            self._preview_state = {"device": "MEO DESK / MOCK", "version": "1.8.0-dev-mock",
+            self._preview_state = {"device": "MEO DESK / MOCK", "version": VERSION + "-mock",
                 "page": 1, "theme": 1, "fps_profile": 1, "motion_style": 1,
                 "motion_state": "music", "cat_motion_frames": 3, "motion": True,
                 "auto_pages": False, "scene_slots": [12, 0, 5, 2], "pc_connected": True,
@@ -416,7 +419,7 @@ class MainWindow(QMainWindow):
         self.heading(box, "04 / DEEP FOCUS", "Dành một chút thời gian.",
                      "Đồng hồ chạy trên ESP32; đóng ứng dụng Windows vẫn không làm mất phiên Focus.")
         panel, layout = card("focusCard")
-        layout.addWidget(text("POMODORO / 25 MIN FOCUS + 5 MIN BREAK", "eyebrow"))
+        layout.addWidget(text("KẾ HOẠCH FOCUS / ĐỒNG BỘ TỪ ESP32", "eyebrow"))
         hero = QHBoxLayout()
         left = QVBoxLayout()
         self.focus_clock = text("25:00", "focusClock")
@@ -454,6 +457,20 @@ class MainWindow(QMainWindow):
         self.focus_hint = text("Chờ liên kết với firmware hỗ trợ Focus (v0.9+).", "subtitle")
         action_box.addWidget(self.focus_hint)
         box.addWidget(actions)
+        config, config_box = card()
+        fields = QHBoxLayout()
+        self.focus_inputs = []
+        self.focus_plan_dirty = False
+        for caption, maximum, initial in (("Làm việc · phút", 180, 25), ("Nghỉ · phút", 60, 5), ("Mục tiêu phiên", 24, 4)):
+            column = QVBoxLayout(); column.addWidget(text(caption, "smallLabel"))
+            spin = QSpinBox(); spin.setRange(1, maximum); spin.setValue(initial)
+            spin.valueChanged.connect(lambda _: setattr(self, "focus_plan_dirty", True))
+            column.addWidget(spin); fields.addLayout(column); self.focus_inputs.append(spin)
+        config_box.addLayout(fields)
+        save_plan = button("Lưu kế hoạch Focus")
+        save_plan.clicked.connect(self.save_focus_plan)
+        config_box.addWidget(save_plan)
+        box.addWidget(config)
         box.addStretch()
         self.stack.addWidget(widget)
 
@@ -477,6 +494,14 @@ class MainWindow(QMainWindow):
         p.addWidget(text("Mỗi 1 giây: CPU/GPU/RAM. Mỗi ~2 giây: media nếu được bật. "
                          "Cần khởi động lại phiên truyền để nhận thay đổi.", "subtitle", wrap=True))
         box.addWidget(panel)
+        backup, b = card()
+        b.addWidget(text("Cấu hình thiết bị", "cardTitle"))
+        row = QHBoxLayout()
+        for caption, operation in (("Xuất cấu hình", self.export_device_config), ("Khôi phục từ file", self.restore_device_config)):
+            entry = button(caption); entry.clicked.connect(operation); row.addWidget(entry)
+        b.addLayout(row)
+        self.profile_hint = text("Sao lưu cảnh, theme, Focus và ngưỡng cảnh báo; không chứa Wi-Fi hoặc pairing key.", "subtitle", wrap=True)
+        b.addWidget(self.profile_hint); box.addWidget(backup)
         box.addStretch()
         self.stack.addWidget(widget)
 
@@ -492,6 +517,11 @@ class MainWindow(QMainWindow):
         s.addWidget(text("DEVICE / A-B FIRMWARE UPDATE", "eyebrow"))
         self.ota_info = text("Chưa kiểm tra thiết bị. Nhập địa chỉ và pairing key ở tab Thiết bị.", "cardTitle", wrap=True)
         s.addWidget(self.ota_info)
+        self.ota_history = text("Chưa đọc lịch sử cập nhật.", "subtitle", wrap=True)
+        s.addWidget(self.ota_history)
+        history_button = button("Đọc lịch sử cập nhật")
+        history_button.clicked.connect(lambda: self.configuration_request("/api/v1/ota/history"))
+        s.addWidget(history_button)
         self.ota_check = button("⌕  KIỂM TRA OTA TRÊN ESP32")
         self.ota_check.clicked.connect(self.check_ota_status)
         s.addWidget(self.ota_check)
@@ -562,7 +592,8 @@ class MainWindow(QMainWindow):
             self.ota_hint.setText("Cần IP và pairing key ở tab Thiết bị.")
             return
         try:
-            length, sha = ota_client.validate_image(image)
+            info = ota_client.inspect_firmware(image)
+            length, sha = info["size"], info["sha256"]
         except (ValueError, OSError) as error:
             self.ota_hint.setText(str(error))
             return
@@ -600,6 +631,7 @@ class MainWindow(QMainWindow):
             try:
                 verified = ota_client.wait_for_boot(
                     host, result["target_slot"],
+                    expected_version=result.get("expected_version"),
                     status_callback=lambda message: self.bus.ota.emit({"type": "verifying", "message": message}),
                 )
             except Exception as error:
@@ -760,6 +792,55 @@ class MainWindow(QMainWindow):
 
     def set_motion_style(self, style: int) -> None:
         self.send_device_control("motion_style", style)
+
+    def save_focus_plan(self) -> None:
+        work, rest, goal = [field.value() for field in self.focus_inputs]
+        if self.preview_mode:
+            self._preview_state.update(focus_work_min=work, focus_break_min=rest, focus_goal=goal,
+                                       focus_duration_s=work*60, focus_remaining_s=work*60, focus_running=False)
+            self.update_from_worker({"type": "device_state", "data": self._preview_state})
+            return
+        self.configuration_request("/api/v1/focus/config", {"work_min": work, "break_min": rest, "goal": goal})
+
+    def configuration_request(self, endpoint: str, payload=None, export_path=None) -> None:
+        if self.preview_mode:
+            self.profile_hint.setText("DEMO · không đọc hoặc ghi cấu hình thiết bị")
+            return
+        host, key = self.settings.host, self.key
+        if not host or not key:
+            self.profile_hint.setText("Nhập IP và pairing key ở tab Thiết bị."); return
+        def task():
+            try:
+                result = json_request(host, endpoint, key, payload, timeout=2.0)
+                if payload is not None and result.get("ok") is not True:
+                    raise ValueError("Thiết bị không chấp nhận cấu hình.")
+                if export_path:
+                    device_config.save_backup(export_path, result)
+                if endpoint == "/api/v1/ota/history":
+                    self.bus.status.emit({"type": "ota_history", "data": result})
+                    return
+                self.bus.status.emit({"type": "config_result", "ok": True, "endpoint": endpoint, "message": "Đã xuất cấu hình." if export_path else "Đã lưu cấu hình trên ESP32."})
+                if not export_path: self.refresh_device_state()
+            except (OSError, ValueError, TimeoutError) as error:
+                self.bus.status.emit({"type": "config_result", "message": str(error)[:160]})
+        threading.Thread(target=task, name="MeoDeskConfig", daemon=True).start()
+
+    def export_device_config(self) -> None:
+        if self.preview_mode:
+            self.configuration_request("/api/v1/config"); return
+        path, _ = QFileDialog.getSaveFileName(self, "Xuất cấu hình MèoDesk", "meodesk-profile.json", "JSON (*.json)")
+        if path: self.configuration_request("/api/v1/config", export_path=path)
+
+    def restore_device_config(self) -> None:
+        if self.preview_mode:
+            self.configuration_request("/api/v1/config"); return
+        path, _ = QFileDialog.getOpenFileName(self, "Khôi phục cấu hình MèoDesk", "", "JSON (*.json)")
+        if not path: return
+        try:
+            data = device_config.load_backup(path)
+        except (OSError, ValueError) as error:
+            self.profile_hint.setText(str(error)); return
+        self.configuration_request("/api/v1/config", data)
 
     def save_scene_favorite(self, slot: int) -> None:
         choices = [combo.currentData() for combo in self.favorite_scenes]
@@ -981,7 +1062,7 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.quit_app)
         menu.addAction(quit_action)
         self.tray.setContextMenu(menu)
-        self.tray.setToolTip("MèoDesk Companion 1.7")
+        self.tray.setToolTip("MèoDesk Companion " + VERSION)
         self.tray.activated.connect(lambda reason: self.show_window()
                             if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -1099,10 +1180,25 @@ class MainWindow(QMainWindow):
             self.focus_phase.setText(("ĐANG TẬP TRUNG" if work else "ĐANG NGHỈ")
                                      if running else "TẠM DỪNG / SẴN SÀNG")
             self.focus_sessions.setText(f"{focus.get('focus_sessions', 0)} phiên đã hoàn thành")
-            total = 1500 if work else 300
+            total = int(focus.get("focus_duration_s") or (1500 if work else 300))
             self.focus_progress.setValue(round(100 * (total - min(total, seconds)) / total))
             self.focus_toggle.setText("Ⅱ  TẠM DỪNG" if running else "▶  TIẾP TỤC")
             self.focus_hint.setText("Đồng bộ từ ESP32 · " + ("FOCUS" if work else "BREAK"))
+            for field, name, default in zip(self.focus_inputs, ("focus_work_min", "focus_break_min", "focus_goal"), (25,5,4)):
+                if not self.focus_plan_dirty and not field.hasFocus():
+                    blocked = QSignalBlocker(field)
+                    field.setValue(int(focus.get(name, default)))
+                    del blocked
+        elif kind == "config_result":
+            if event.get("ok") and event.get("endpoint") == "/api/v1/focus/config":
+                self.focus_plan_dirty = False
+            self.profile_hint.setText(event.get("message", ""))
+            self.focus_hint.setText(event.get("message", ""))
+        elif kind == "ota_history":
+            updates = event["data"].get("updates", [])
+            self.ota_history.setText("\n".join(" · ".join(str(item.get(key) or "") for key in
+                ("phase", "version_before", "version_after", "target_slot")) for item in reversed(updates[-6:]))
+                or "Chưa có cập nhật được ghi lại bởi firmware này.")
         elif kind == "focus_error":
             self.focus_hint.setText("Focus: " + event.get("message", "Không gửi được lệnh"))
         elif kind == "motion_status":

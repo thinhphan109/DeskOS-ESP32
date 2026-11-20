@@ -1,3 +1,20 @@
+# 1.9.0-dev — device profiles and update diagnostics
+
+- Allowlisted configuration export/restore with full validation and one NVS
+  profile commit, legacy migration and atomic favorite-scene swaps.
+- Configurable Focus work/break minutes and session goal in Web/Windows;
+  actual duration drives TFT labels and progress, with legacy 25/5 defaults.
+- Optional adjacent-manifest checks and expected-version boot confirmation;
+  six-entry best-effort device update journal, visible from both clients.
+- 81 Python tests, native profile/Focus tests and browser suites passed;
+  PlatformIO build succeeded. No device deployment was performed.
+- Public source checks, Linux host/firmware CI and matching application
+  versions support direct source pushes without owner configuration/binaries.
+
+See [CONFIG_AND_OTA_V19.md](CONFIG_AND_OTA_V19.md).
+
+---
+
 # 1.8.0-dev — Personal Studio / shared device state
 
 - Initial optional Performance Lab adds strip CPU, DMA submit/wait, cat/card/
