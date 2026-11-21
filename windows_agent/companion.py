@@ -29,6 +29,7 @@ import catpack_client
 import device_config
 from scene_editor import SceneEditor
 from scene_layout import validate_layout
+from telemetry_chart import TelemetryChart
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings
 from state_sync import StateCursor, FocusDisplay, MediaDisplay
@@ -273,7 +274,8 @@ class MainWindow(QMainWindow):
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
         self.heading(box, "01 / LIVE STUDIO", "Cậu bạn nhỏ trên bàn.",
-                     "Tất cả dữ liệu là số đo thật từ máy Windows, gửi qua Wi-Fi nội bộ.")
+                     "DEMO · dữ liệu mô phỏng, không kết nối thiết bị." if self.preview_mode else
+                     "Số đo từ Windows qua Wi-Fi nội bộ; cảm biến không hỗ trợ hiển thị N/A.")
         panel = QHBoxLayout()
         panel.setSpacing(14)
         primary, p = card("mintCard")
@@ -302,6 +304,8 @@ class MainWindow(QMainWindow):
             setattr(self, {"GPU LOAD": "gpu", "RAM USED": "ram", "CPU / GPU TEMP": "temps"}[title], value)
         panel.addWidget(dark, 2)
         box.addLayout(panel)
+        self.pc_chart = TelemetryChart()
+        box.addWidget(self.pc_chart)
         bottom, b = card()
         row = QHBoxLayout()
         self.agent_button = button("▶  BẮT ĐẦU TRUYỀN DỮ LIỆU", True)
@@ -992,6 +996,7 @@ class MainWindow(QMainWindow):
 
     def tick_focus_display(self) -> None:
         self.tick_media_display()
+        self.pc_chart.update()
         seconds = self.focus_display.seconds()
         if seconds is not None:
             self.focus_clock.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
@@ -1206,6 +1211,7 @@ class MainWindow(QMainWindow):
             if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
             data = event["data"]
+            self.pc_chart.add(data,event.get("host",self.settings.host))
             self.cpu.setText(f"{data['cpu_percent']:.0f}%")
             self.gpu.setText("N/A" if data.get("gpu_percent") is None else f"{data['gpu_percent']:.0f}%")
             self.ram.setText(f"{data['ram_percent']:.0f}%")
@@ -1213,7 +1219,7 @@ class MainWindow(QMainWindow):
             gpu = data.get("gpu_temp_c")
             self.temps.setText(f"{cpu:.0f}° / {gpu:.0f}°" if cpu is not None and gpu is not None
                                else f"{gpu:.0f}° GPU" if gpu is not None else "N/A")
-            self.state.setText("● ĐANG KẾT NỐI")
+            self.state.setText("DEMO · XEM TRƯỚC" if self.preview_mode else "● ĐÃ KẾT NỐI")
             self.set_cat_mood(event.get("emotion", "healthy"))
             mode = "DEMO / mô phỏng" if data.get("demo") else "Dữ liệu thực"
             self.hint.setText(f"ESP32: {event['host']}    ·    Mèo: {event['emotion']}    ·    {mode}")

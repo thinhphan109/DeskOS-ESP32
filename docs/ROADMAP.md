@@ -62,3 +62,7 @@ Cozy, Midnight and Auto keep IDs 0/1/2. Cyberpunk, Sakura and Minimal add IDs 3/
 ## v2.4 source checkpoint
 
 Music position projection now shares duration/stale rules across TFT/Web/Windows. Existing real SMTC metadata, cover and transport stay in use. See [Music Studio](MUSIC_STUDIO_V24.md). Player-specific acceptance remains pending.
+
+## v2.5 source checkpoint
+
+Native Windows Overview has bounded CPU/GPU/RAM history with explicit gaps, source isolation and DEMO labelling. See [PC Monitor](PC_MONITOR_V25.md).
