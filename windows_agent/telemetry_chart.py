@@ -30,7 +30,7 @@ class TelemetryChart(QWidget):
             painter.drawLine(left,int(y),right,int(y))
             painter.setPen(QColor("#52645a"));painter.drawText(0,int(y)+4,str(value));painter.setPen(QColor("#dadfd6"))
         painter.setPen(QColor("#52645a"));painter.drawText(left,self.height()-5,"−60 s");painter.drawText(right-36,self.height()-5,"hiện tại")
-        for index,(name,color) in enumerate((("CPU","#b25242"),("GPU","#65539a"),("RAM","#28654b"))):
+        for index,(name,color) in enumerate((("CPU","#66834f"),("GPU","#af835a"),("RAM","#688669"))):
             painter.setPen(QPen(QColor(color),2))
             painter.drawText(max(left,right-230)+index*78,16,name)
             for segment in self.history.segments(index,now):

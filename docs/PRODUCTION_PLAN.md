@@ -1,12 +1,12 @@
 # Kế hoạch hoàn thiện ứng dụng desktop và OTA
 
-Cập nhật ngày 21/11/2026. Mục tiêu của đợt kế tiếp là hoàn thiện trải nghiệm sử dụng, kết nối và cập nhật. Các mục dưới đây là kế hoạch; chưa đổi tên sản phẩm, thay bootloader hoặc triển khai firmware lên thiết bị.
+Cập nhật ngày 21/11/2026. Mục tiêu của đợt kế tiếp là hoàn thiện trải nghiệm sử dụng, kết nối và cập nhật. Các mục đã làm được ghi rõ theo phiên bản. Chưa thay bootloader hoặc triển khai firmware lên thiết bị.
 
-## Tên sản phẩm đề xuất
+## Tên sản phẩm đã chốt
 
-Ưu tiên **MiuDesk**: ngắn, dễ gõ, giữ liên tưởng đến mèo và dùng được khi mở rộng sang phần cứng khác. Tên ứng dụng Windows là **MiuDesk Studio**; firmware và giao diện Web cùng thuộc MiuDesk. **MèoDesk** vẫn là lựa chọn hợp lý nếu ưu tiên tên tiếng Việt hiện có. Tránh **MimiDesk** vì đã có [sản phẩm phần mềm cùng tên](https://www.mimidesk.com/).
+Người dùng đã chốt **mimi.desk** cho Web và app Python. Bản v2.11-dev áp dụng tên hiển thị mới, giao diện ấm áp/gọn/hiện đại, điều hướng theo tác vụ và khu vực Chẩn đoán thu gọn.
 
-Tên MiuDesk là đề xuất chưa được chốt. Chưa thay repository, đường dẫn cấu hình, namespace NVS, hostname, khoá Registry hay định danh giao thức. Khi đổi thương hiệu, cần đọc được cấu hình cũ và giữ khả năng giao tiếp với firmware đã cài.
+Giữ đường dẫn cấu hình, namespace NVS, hostname, khoá Registry và định danh giao thức cũ để tương thích thiết bị đã cài. Bản này chưa có reader tự tải firmware từ server; [đề xuất OTA server](SERVER_OTA_PROPOSAL.md) ghi hai chế độ đã chọn và cách xử lý nhiều release.
 
 ## Ứng dụng desktop
 
@@ -31,7 +31,7 @@ Mỗi trạng thái dùng một mã ổn định và nội dung riêng cho ngư�
 | Trạng thái | Nội dung trên giao diện | Hành động |
 |---|---|---|
 | Đang tìm | Đang tìm thiết bị… | Chọn thiết bị / Nhập địa chỉ |
-| Đã kết nối | Đã kết nối với MiuDesk | Xem thiết bị |
+| Đã kết nối | Đã kết nối với mimi.desk | Xem thiết bị |
 | Dữ liệu quá hạn | Đang kết nối lại… Dữ liệu hiển thị là lần nhận gần nhất. | Kiểm tra kết nối |
 | Không liên lạc được | Chưa liên lạc được với thiết bị. Kiểm tra nguồn và Wi-Fi, rồi thử lại. | Thử lại |
 | Chưa có nhạc | Chưa phát nhạc. Mở Spotify hoặc trình phát trên PC. | Không cần thông báo lỗi |

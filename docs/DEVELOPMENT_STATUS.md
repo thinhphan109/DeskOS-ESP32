@@ -1,6 +1,6 @@
-# Tình hình phát triển MèoDesk
+# Tình hình phát triển mimi.desk
 
-Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển khai theo các mốc đến v2.10-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
+Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển khai theo các mốc đến v2.11-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
 
 | Mốc | Đã có trong mã nguồn | Giới hạn còn lại |
 |---|---|---|
@@ -17,6 +17,7 @@ Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển kh
 | v2.8 | Sáu quy tắc có thời gian giữ/chờ/chống lặp, sao lưu nguyên bộ, editor JSON đồng bộ | Editor nâng cao dùng JSON; chưa có trình dựng quy tắc trực quan |
 | v2.9 | Ba kênh dữ liệu ngoài có TTL, widget Data 1–3, SDK Python/CLI | Chưa tự kết nối lịch, thời tiết, Home Assistant hay tài khoản bên ngoài |
 | v2.10 | Music TFT rộng 304×160, ảnh bìa 120px, font tiếng Việt và cắt UTF-8; Music Web/Windows lớn hơn | Nguồn ảnh vẫn 64×64; cần nghiệm thu TFT và bản Windows cuối trên máy thật |
+| v2.11 | Tên hiển thị mimi.desk, Web/Python cùng hướng ấm áp/gọn, điều hướng theo tác vụ, Chẩn đoán thu gọn và chiều cao theo trang | OTA server mới ở mức đề xuất; chưa tự tải firmware hoặc cập nhật EXE |
 
 ## Bằng chứng kiểm thử
 
@@ -40,4 +41,4 @@ Phần v3.0 còn lại gồm điều khiển nhiều thiết bị đồng thời
 
 ## Đợt chuẩn hoá sản phẩm tiếp theo
 
-[Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) đề xuất tên MiuDesk/MiuDesk Studio, nội dung giao diện, điều hướng, vòng đời kết nối và cải tiến cập nhật. Đây là kế hoạch; chưa đổi định danh kỹ thuật hoặc gắn nhãn stable cho bản dev.
+[Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) đề xuất tên MiuDesk/MiuDesk Studio, nội dung giao diện, điều hướng, vòng đời kết nối và cải tiến cập nhật. Tên hiển thị mimi.desk đã được chốt và áp dụng. Định danh kỹ thuật cũ giữ để tương thích; bản dev chưa được gắn nhãn stable. Xem [phạm vi redesign](REDESIGN_V211.md) và [đề xuất OTA server](SERVER_OTA_PROPOSAL.md).

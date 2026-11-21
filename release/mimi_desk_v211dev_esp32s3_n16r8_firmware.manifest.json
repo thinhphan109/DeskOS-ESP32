@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "board": "meodesk-esp32s3-n16r8",
+  "firmware_version": "2.11.0-dev",
+  "filename": "mimi_desk_v211dev_esp32s3_n16r8_firmware.bin",
+  "size": 2437840,
+  "sha256": "37cbd7289300adb20030798a92bdec415ccc20b55cd5c4de729ac49523671a19",
+  "signature": null,
+  "transport": "local-pairing-http"
+}

@@ -176,3 +176,12 @@ Local Python regression: **115 tests passed**. Native domain programs: **13 pass
 The final PlatformIO build succeeds with **59,172 bytes static RAM** and **2,395,419 bytes program Flash** (38.1% of the 6 MiB slot). The optional Music metadata canvas reserves **79,040 bytes PSRAM**; direct drawing remains a fallback. Firmware BIN size: **2,454,800 bytes**. SHA-256: `3e07dd4c84a96281c817d9bba1a5f64bd67c2afc4abe876351ee3c1ceb590d1f`.
 
 The TFT design image is a simulation using the embedded bitmaps, not a physical capture. Web's expanded workspace was inspected in a local mock. Native GUI regression passed; final visual acceptance of the latest spacing and the packaged app on a clean Windows installation remains pending. No firmware was deployed. The next desktop/naming/OTA work is a proposal in [the production plan](PRODUCTION_PLAN.md).
+
+
+## v2.11 mimi.desk focused verification
+
+Per the owner's faster-development preference, this UI slice runs the five GUI smoke cases, embedded-JavaScript syntax/OTA-boot checks and the shared-state JavaScript check, not the complete regression suite. The GUI cases and both Node programs pass. Web Overview/Studio/Device were inspected, including a 390px viewport with document width exactly 390px and a 316px Studio canvas. Native Overview/Music were inspected in DEMO; the last Device card-height adjustment was checked through GUI construction, without restarting the user's active preview.
+
+Final PlatformIO build: **59,172 bytes static RAM**, **2,378,459 bytes program Flash** (37.8% of a 6 MiB slot). Private BIN size: **2437840 bytes**, SHA-256 `37cbd7289300adb20030798a92bdec415ccc20b55cd5c4de729ac49523671a19`. Only the manifest/checksum are committed. No OTA, server deployment or public firmware binary publication occurred.
+
+This source checkpoint skips the broad push CI to avoid redundant checks during UI development. Packaging and full release acceptance remain for the release milestone.

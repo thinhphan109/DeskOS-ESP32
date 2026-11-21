@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MèoDesk Companion v1.7 — Windows dashboard and Living Motion Engine.
+"""mimi.desk Companion v1.7 — Windows dashboard and Living Motion Engine.
 
 Install GUI requirements then double-click the packaged app. The original
 pc_agent.py and tray_agent.py remain available as independent fallbacks.
@@ -12,9 +12,10 @@ import time
 import threading
 import webbrowser
 import sqlite3
+import math
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, Signal, QTimer, QUrl, QSignalBlocker
+from PySide6.QtCore import QObject, Qt, Signal, QTimer, QUrl, QSignalBlocker, QSize
 from PySide6.QtNetwork import QAbstractSocket, QNetworkProxy
 from PySide6.QtWebSockets import QWebSocket
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
@@ -42,61 +43,8 @@ from state_sync import StateCursor, FocusDisplay, MediaDisplay
 from app_version import VERSION
 
 
-QSS = """
-QMainWindow,QWidget#root { background: #f7f4ef; color: #2d3134; }
-QLabel { color: #2d3134; font-family: 'Segoe UI'; }
-QLabel#brand { color: #f7f2e9; font-size: 27px; font-weight: 800; }
-QLabel#sideSmall { color: #adb8b1; font: 11px Consolas; letter-spacing: 1px; }
-QFrame#sidebar { background: #25332f; border-radius: 0; }
-QPushButton#nav { text-align: left; border: none; background: transparent; color: #a9b7af;
-  border-radius: 12px; padding: 14px 19px; font: 600 13px 'Segoe UI'; }
-QPushButton#nav:hover { background: #36493f; color: #fff; }
-QPushButton#nav[chosen="true"] { background: #bce7d2; color: #1c4c3c; }
-QLabel#eyebrow { color: #8c7774; font: 700 10px Consolas; letter-spacing: 2px; }
-QLabel#title { color: #252e2b; font: 800 31px 'Segoe UI'; }
-QLabel#subtitle { color: #8a8b88; font: 12px 'Segoe UI'; }
-QFrame#card { background: #fffefa; border: 1px solid #e7e2da; border-radius: 19px; }
-QFrame#mintCard { background: #d8f1e2; border: 1px solid #c5e7d4; border-radius: 20px; }
-QFrame#focusCard { background: #e6dcf6; border: 1px solid #d9caed; border-radius: 20px; }
-QLabel#focusClock { font: 800 72px Consolas; color: #382f54; }
-QLabel#albumCover { background: #f2e8dc; border: 1px solid #d6cabb; border-radius: 13px;
-  color: #837569; font: 700 11px Consolas; }
-QFrame#darkCard { background: #292f34; border-radius: 20px; }
-QFrame#musicPanel { background: #152d27; border-radius: 14px; }
-QLabel#musicSong { color: #f2f8f4; font: 700 34px 'Segoe UI'; }
-QLabel#musicArtist { color: #c4d9ce; font: 18px 'Segoe UI'; }
-QLabel#musicState { color: #c4d9ce; font: 13px 'Segoe UI'; }
-QFrame#musicPanel QProgressBar { background: #40594e; height: 6px; border-radius: 3px; }
-QFrame#musicPanel QProgressBar::chunk { background: #86e0b0; border-radius: 3px; }
-QLabel#bigNumber { font: 800 60px Consolas; color: #25332f; }
-QLabel#darkNumber { font: 800 33px Consolas; color: #fff9ee; }
-QLabel#darkMeta { font: 11px Consolas; color: #b8c0bf; }
-QLabel#smallLabel { font: 11px Consolas; color: #7d817e; }
-QLabel#cardTitle { font: 750 17px 'Segoe UI'; color: #2c3833; }
-QPushButton#primary { background: #263e34; color: #ffffff; border: none; border-radius: 11px;
-  padding: 12px 21px; font: 700 12px 'Segoe UI'; }
-QPushButton#primary:hover { background: #345e48; }
-QPushButton#secondary { background: #ffffff; color: #314438; border: 1px solid #d7ddd5;
-  border-radius: 11px; padding: 11px 17px; font: 700 12px 'Segoe UI'; }
-QPushButton#secondary:hover { border-color: #7dac96; background: #f7fff9; }
-QLineEdit { background: #fffefa; color: #24312b; border: 1px solid #ddd9d0;
-  border-radius: 10px; padding: 12px; font: 13px Consolas; }
-QLineEdit:focus { border: 2px solid #70aa88; }
-QListWidget { border: 1px solid #ddd9d0; background: #fffefa; border-radius: 10px;
-  padding: 6px; color: #303a34; }
-QListWidget::item { padding: 11px; border-radius: 8px; }
-QListWidget::item:selected { background: #d7ebde; color: #2b4236; }
-QCheckBox { color: #444d49; font: 12px 'Segoe UI'; spacing: 10px; }
-QProgressBar { background: #eaece6; border-radius: 6px; height: 10px; border: 0; }
-QProgressBar::chunk { background: #e38e7b; border-radius: 6px; }
-QPushButton:checked { background: #d8f1e2; border: 1px solid #42866a; color: #1d513b; }
-QPushButton:disabled { color: #7d817c; background: #e4e7e0; }
-QComboBox { padding: 7px 10px; background: #fffefa; color: #24312b; border: 1px solid #d3d8ce; border-radius: 7px; min-height: 22px; }
-QComboBox QAbstractItemView { background: #fffefa; color: #24312b; selection-background-color: #d8f1e2; }
-QSpinBox { background: #fffefa; color: #24312b; border: 1px solid #d3d8ce; border-radius: 7px; padding: 7px; }
-QScrollBar:vertical { background: #eeeae3; width: 10px; }
-QScrollBar::handle:vertical { background: #bbb9af; border-radius: 5px; min-height: 24px; }
-"""
+from ui_theme import QSS, ContentStack, Disclosure, nav_icon
+
 
 
 def text(value: str, role: str | None = None, wrap: bool = False) -> QLabel:
@@ -111,6 +59,7 @@ def text(value: str, role: str | None = None, wrap: bool = False) -> QLabel:
 def card(kind: str = "card") -> tuple[QFrame, QVBoxLayout]:
     frame = QFrame()
     frame.setObjectName(kind)
+    frame.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Maximum)
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(16, 14, 16, 14)
     layout.setSpacing(8)
@@ -179,20 +128,11 @@ class MainWindow(QMainWindow):
         self.bus.discovery.connect(self.update_discovery)
         self.bus.ota.connect(self.update_ota)
         self.bus.catpack.connect(self.update_catpack)
-        self.setWindowTitle("MèoDesk Personal Studio " + VERSION)
+        self.setWindowTitle("mimi.desk · " + VERSION)
         self.setWindowIcon(cat_icon())
-        self.resize(1000, 700)
-        self.setMinimumSize(790, 530)
-        self.setStyleSheet(QSS + """
-            QLabel#title { font-size: 25px; } QLabel#bigNumber { font-size: 46px; }
-            QLabel#focusClock { font-size: 56px; } QFrame#card,QFrame#mintCard,QFrame#focusCard,QFrame#darkCard { border-radius: 12px; }
-            QPushButton#nav { padding: 11px 12px; border-radius: 8px; }
-            QPushButton#primary,QPushButton#secondary { padding: 9px 13px; border-radius: 8px; }
-            QLineEdit { padding: 9px; border-radius: 8px; }
-            QWidget#content,QWidget#tabPage,QStackedWidget,QScrollArea { background: #f7f4ef; }
-            QLabel#subtitle,QLabel#smallLabel { color: #5c665e; }
-            QPushButton#secondary:checked { background: #d8f1e2; border: 1px solid #42866a; color: #1d513b; }
-        """)
+        self.resize(1120, 760)
+        self.setMinimumSize(850, 560)
+        self.setStyleSheet(QSS)
 
         root = QWidget()
         root.setObjectName("root")
@@ -202,24 +142,28 @@ class MainWindow(QMainWindow):
         frame.setSpacing(0)
         side = QFrame()
         side.setObjectName("sidebar")
-        side.setFixedWidth(176)
+        side.setFixedWidth(178)
         sidebox = QVBoxLayout(side)
-        sidebox.setContentsMargins(14, 24, 14, 20)
+        sidebox.setContentsMargins(12, 26, 12, 20)
         sidebox.setSpacing(6)
-        sidebox.addWidget(text("mèo.desk", "brand"))
-        sidebox.addWidget(text("PERSONAL STUDIO", "sideSmall"))
+        sidebox.addWidget(text("mimi.desk", "brand"))
+        sidebox.addWidget(text("Không gian của bạn", "sideSmall"))
         sidebox.addSpacing(20)
         self.nav: list[QPushButton] = []
-        for label in ("◈   Tổng quan", "◎   Thiết bị", "♫   Âm nhạc",
-                      "◷   Tập trung", "⚙   Cài đặt", "↑   Firmware", "✦   Studio"):
-            n = QPushButton(label)
-            n.setObjectName("nav")
-            n.setCursor(Qt.CursorShape.PointingHandCursor)
-            n.clicked.connect(lambda _, i=len(self.nav): self.set_tab(i))
-            self.nav.append(n)
-            sidebox.addWidget(n)
+        names=("Tổng quan","Thiết bị","Âm nhạc","Tập trung","Cài đặt","Cập nhật","Studio")
+        icons=('home','device','music','focus','settings','update','studio')
+        for index,(caption,icon) in enumerate(zip(names,icons)):
+            node=QPushButton(caption); node.setObjectName("nav")
+            node.setIcon(nav_icon(icon)); node.setIconSize(QSize(19,19))
+            node.setCursor(Qt.CursorShape.PointingHandCursor)
+            node.clicked.connect(lambda checked=False,i=index:self.set_tab(i))
+            self.nav.append(node)
+        for index in (0,2,3,6,1): sidebox.addWidget(self.nav[index])
+        self.nav[5].setVisible(False)
         sidebox.addStretch()
-        sidebox.addWidget(text("YOUR LITTLE DESK BUDDY\n\n● LOCAL / NO CLOUD", "sideSmall"))
+        sidebox.addWidget(self.nav[4])
+        sidebox.addSpacing(12)
+        sidebox.addWidget(text("Một góc bàn dễ chịu hơn.", "sideSmall"))
         frame.addWidget(side)
 
         area = QScrollArea()
@@ -228,9 +172,17 @@ class MainWindow(QMainWindow):
         page = QWidget()
         page.setObjectName("content")
         area.setWidget(page)
-        self.stack = QStackedWidget()
+        self.stack = ContentStack()
+        self.content_scroll=area
+        self.device_seen_at=0.0
         pagebox = QVBoxLayout(page)
-        pagebox.setContentsMargins(20, 20, 20, 20)
+        pagebox.setContentsMargins(26, 22, 26, 24)
+        pagebox.setSpacing(22)
+        top=QHBoxLayout()
+        self.page_trail=text("mimi.desk / Tổng quan", "pageTrail")
+        self.connection_badge=text("Chưa có thiết bị", "connectionBadge")
+        top.addWidget(self.page_trail); top.addStretch(); top.addWidget(self.connection_badge)
+        pagebox.addLayout(top)
         pagebox.addWidget(self.stack)
         frame.addWidget(area, 1)
         self.make_overview()
@@ -255,7 +207,7 @@ class MainWindow(QMainWindow):
         self.display_timer.timeout.connect(self.tick_focus_display)
         self.display_timer.start(200)
         if preview:
-            self.setWindowTitle("MèoDesk Studio — DEMO / xem trước")
+            self.setWindowTitle("mimi.desk · DEMO / Xem trước")
             self._preview_state = {"device": "MEO DESK / MOCK", "version": VERSION + "-mock",
                 "page": 1, "theme": 1, "fps_profile": 1, "motion_style": 1,
                 "motion_state": "music", "cat_motion_frames": 3, "motion": True,
@@ -269,7 +221,12 @@ class MainWindow(QMainWindow):
             self.update_from_worker({"type":"media", "data":{"available":True,"playing":False,
                 "title":"Đừng làm trái tim anh đau", "artist":"Sơn Tùng M-TP · DEMO",
                 "position_ms":92000,"duration_ms":227000}})
-            self.set_tab(6)
+            for age in range(60,-1,-1):
+                self.pc_chart.history.add({"demo":True,"cpu_percent":25+7*math.sin(age/8),"gpu_percent":14+5*math.sin(age/10),"ram_percent":60+2*math.sin(age/16)},"preview",now=time.monotonic()-age)
+            self.preview_graph_timer=QTimer(self)
+            self.preview_graph_timer.timeout.connect(lambda:self.pc_chart.add({"demo":True,"cpu_percent":25,"gpu_percent":14,"ram_percent":60},"preview"))
+            self.preview_graph_timer.start(1000)
+            self.set_tab(0)
         if self.settings.host:
             self.host_edit.setText(self.settings.host)
             self.update_from_worker({"type": "state", "message": "Đang khởi tạo kết nối tự động..."})
@@ -290,14 +247,14 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "01 / LIVE STUDIO", "Cậu bạn nhỏ trên bàn.",
+        self.heading(box, "01 / LIVE STUDIO", "Chào bạn, chào ngày mới.",
                      "DEMO · dữ liệu mô phỏng, không kết nối thiết bị." if self.preview_mode else
-                     "Số đo từ Windows qua Wi-Fi nội bộ; cảm biến không hỗ trợ hiển thị N/A.")
+                     "Theo dõi máy tính, nhạc và nhịp tập trung từ một nơi.")
         panel = QHBoxLayout()
         panel.setSpacing(14)
         primary, p = card("mintCard")
-        primary.setMaximumHeight(240)
-        p.addWidget(text("CPU / LIVE", "eyebrow"))
+        primary.setMaximumHeight(220)
+        p.addWidget(text("CPU", "eyebrow"))
         self.cpu = text("—%", "bigNumber")
         cpu_hero = QHBoxLayout()
         cpu_hero.addWidget(self.cpu, 1)
@@ -306,48 +263,50 @@ class MainWindow(QMainWindow):
         self.cat_picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cpu_hero.addWidget(self.cat_picture, 0)
         p.addLayout(cpu_hero)
-        p.addWidget(text("Năng lượng của chiếc máy hôm nay.", "smallLabel"))
+        p.addWidget(text("Trạng thái máy tính của bạn", "smallLabel"))
         p.addStretch()
-        self.state = text("CHƯA KẾT NỐI", "cardTitle", wrap=True)
+        self.state = text("Chưa kết nối", "cardTitle", wrap=True)
         p.addWidget(self.state)
         self.set_cat_mood("healthy")
         panel.addWidget(primary, 3)
         dark, d = card("darkCard")
-        dark.setMaximumHeight(240)
-        for title in ("GPU LOAD", "RAM USED", "CPU / GPU TEMP"):
+        dark.setMaximumHeight(220)
+        for title in ("GPU", "Bộ nhớ RAM", "Nhiệt độ CPU / GPU"):
             d.addWidget(text(title, "darkMeta"))
             value = text("—", "darkNumber")
             d.addWidget(value)
-            setattr(self, {"GPU LOAD": "gpu", "RAM USED": "ram", "CPU / GPU TEMP": "temps"}[title], value)
+            setattr(self, {"GPU": "gpu", "Bộ nhớ RAM": "ram", "Nhiệt độ CPU / GPU": "temps"}[title], value)
         panel.addWidget(dark, 2)
         box.addLayout(panel)
         self.pc_chart = TelemetryChart()
         box.addWidget(self.pc_chart)
         bottom, b = card()
         row = QHBoxLayout()
-        self.agent_button = button("▶  BẮT ĐẦU TRUYỀN DỮ LIỆU", True)
+        self.agent_button = button("Bắt đầu kết nối", True)
         self.agent_button.clicked.connect(self.toggle_agent)
         row.addWidget(self.agent_button)
-        link = button("↗  WEB STUDIO")
+        link = button("Mở giao diện Web")
         link.clicked.connect(self.open_web)
         row.addWidget(link)
         b.addLayout(row)
-        self.hint = text("Chọn thiết bị và nhập pairing key để bắt đầu.", "subtitle", wrap=True)
+        self.hint = text("Kết nối thiết bị để đồng bộ PC, nhạc và cảnh của bạn.", "subtitle", wrap=True)
         b.addWidget(self.hint)
+        box.addWidget(bottom)
+        diagnostics=Disclosure("Chẩn đoán kết nối và hiệu năng")
         self.extra_metrics = text("NET ↓ — KB/s  ↑ — KB/s   ·   GPU VRAM — / — GB", "smallLabel", wrap=True)
-        b.addWidget(self.extra_metrics)
+        diagnostics.content.addWidget(self.extra_metrics)
         self.motion_live = text("LIVING MOTION / CHỜ KẾT NỐI ESP32", "smallLabel", wrap=True)
-        b.addWidget(self.motion_live)
+        diagnostics.content.addWidget(self.motion_live)
         self.sync_label = text("HTTP · chờ kết nối", "smallLabel")
-        b.addWidget(self.sync_label)
+        diagnostics.content.addWidget(self.sync_label)
         self.lab_live = text("Performance Lab · chưa có dữ liệu đo", "smallLabel", wrap=True)
-        b.addWidget(self.lab_live)
+        diagnostics.content.addWidget(self.lab_live)
         self.lab_toggle = button("Bật đo Performance Lab")
         self.lab_toggle.setCheckable(True)
         self.lab_toggle.setEnabled(False)
         self.lab_toggle.clicked.connect(lambda checked: self.send_device_control("perf_trace", int(checked)))
-        b.addWidget(self.lab_toggle)
-        box.addWidget(bottom)
+        diagnostics.content.addWidget(self.lab_toggle)
+        box.addWidget(diagnostics)
         box.addStretch()
         self.stack.addWidget(widget)
 
@@ -356,35 +315,39 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "02 / DEVICE LINK", "Tìm MèoDesk của bạn.",
-                     "Ưu tiên IP đã lưu → meodesk.local → hotspot → quét mạng LAN khi bạn yêu cầu.")
+        self.heading(box, "02 / DEVICE LINK", "Thiết bị của bạn",
+                     "Bật nguồn thiết bị và kết nối cùng mạng Wi-Fi với máy tính.")
         panel, p = card()
-        p.addWidget(text("ĐỊA CHỈ THIẾT BỊ", "eyebrow"))
+        p.addWidget(text("Địa chỉ thiết bị", "eyebrow"))
         self.host_edit = QLineEdit(self.settings.host)
         self.host_edit.setPlaceholderText("Ví dụ: 192.168.0.107 hoặc meodesk.local")
         p.addWidget(self.host_edit)
-        p.addWidget(text("PAIRING KEY / KHÔNG PHẢI MẬT KHẨU WI-FI", "eyebrow"))
+        p.addWidget(text("Mã ghép nối", "eyebrow"))
         self.key_edit = QLineEdit(self.key)
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key_edit.setPlaceholderText("Khóa API đã cấu hình trong firmware")
+        self.key_edit.setPlaceholderText("Nhập mã ghép nối của thiết bị")
         p.addWidget(self.key_edit)
         actions = QHBoxLayout()
-        apply_btn = button("✓  LƯU VÀ KẾT NỐI", True)
+        apply_btn = button("Lưu và kết nối", True)
         apply_btn.clicked.connect(self.save_device)
         actions.addWidget(apply_btn)
-        self.scan_btn = button("⌕  QUÉT IP TRONG LAN")
+        self.scan_btn = button("Tìm thiết bị")
         self.scan_btn.clicked.connect(self.scan_devices)
         actions.addWidget(self.scan_btn)
         p.addLayout(actions)
         box.addWidget(panel)
+        shortcuts=QHBoxLayout()
+        for caption,index in (("Cập nhật firmware",5),("Cài đặt và sao lưu",4)):
+            entry=button(caption); entry.clicked.connect(lambda checked=False,i=index:self.set_tab(i)); shortcuts.addWidget(entry)
+        box.addLayout(shortcuts)
         scan, s = card()
-        s.addWidget(text("THIẾT BỊ PHÁT HIỆN", "eyebrow"))
+        s.addWidget(text("Thiết bị tìm thấy", "cardTitle"))
         self.found = QListWidget()
         self.found.setMinimumHeight(100)
         self.found.setMaximumHeight(150)
         self.found.itemDoubleClicked.connect(lambda _: self.select_device())
         s.addWidget(self.found)
-        select_btn = button("DÙNG THIẾT BỊ ĐƯỢC CHỌN")
+        select_btn = button("Kết nối thiết bị đã chọn")
         select_btn.clicked.connect(self.select_device)
         s.addWidget(select_btn)
         box.addWidget(scan)
@@ -507,8 +470,8 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "05 / PREFERENCES", "Đúng chất của bạn.",
-                     "Dữ liệu nằm trong mạng nội bộ, không gửi lên máy chủ bên ngoài.")
+        self.heading(box, "05 / PREFERENCES", "Cài đặt",
+                     "Các tuỳ chọn cho máy tính, thông báo và cấu hình thiết bị.")
         panel, p = card()
         self.media_check = QCheckBox("Bật Now Playing (Windows Media Controls)")
         self.media_check.setChecked(self.settings.media)
@@ -516,14 +479,14 @@ class MainWindow(QMainWindow):
         self.min_check = QCheckBox("Mở thu nhỏ vào khay hệ thống từ lần chạy sau")
         self.min_check.setChecked(self.settings.start_minimized)
         p.addWidget(self.min_check)
-        save_btn = button("LƯU TÙY CHỌN", True)
+        save_btn = button("Lưu tuỳ chọn", True)
         save_btn.clicked.connect(self.save_preferences)
         p.addWidget(save_btn)
         p.addWidget(text("Mỗi 1 giây: CPU/GPU/RAM. Mỗi ~2 giây: media nếu được bật. "
                          "Cần khởi động lại phiên truyền để nhận thay đổi.", "subtitle", wrap=True))
         box.addWidget(panel)
         backup, b = card()
-        self.startup_check = QCheckBox("Khởi động MèoDesk cùng Windows cho tài khoản này")
+        self.startup_check = QCheckBox("Mở mimi.desk khi đăng nhập Windows")
         self.startup_check.setChecked(False if self.preview_mode else startup.is_enabled())
         self.startup_check.setEnabled(sys.platform == "win32" and not self.preview_mode)
         b.addWidget(self.startup_check)
@@ -533,7 +496,7 @@ class MainWindow(QMainWindow):
         b.addWidget(startup_apply)
         self.startup_hint = text("Chỉ thay đổi khi nhấn Áp dụng. Không cần quyền quản trị.", "subtitle", wrap=True)
         b.addWidget(self.startup_hint)
-        b.addWidget(text("Thông báo lên MèoDesk", "cardTitle"))
+        b.addWidget(text("Thông báo lên mimi.desk", "cardTitle"))
         self.notification_text=QLineEdit("Desk reminder")
         self.notification_text.setMaxLength(60)
         self.notification_text.setPlaceholderText("Nhãn TFT dùng ASCII")
@@ -542,7 +505,7 @@ class MainWindow(QMainWindow):
         self.notification_hidden.setChecked(True);b.addWidget(self.notification_hidden)
         notify_button=button("Gửi thông báo · 8 giây")
         notify_button.clicked.connect(self.send_desk_notification);b.addWidget(notify_button)
-        b.addWidget(text("Cấu hình thiết bị", "cardTitle"))
+        b.addWidget(text("Sao lưu cấu hình thiết bị", "cardTitle"))
         row = QHBoxLayout()
         for caption, operation in (("Xuất cấu hình", self.export_device_config), ("Khôi phục từ file", self.restore_device_config)):
             entry = button(caption); entry.clicked.connect(operation); row.addWidget(entry)
@@ -557,7 +520,7 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "06 / LOCAL FIRMWARE UPDATER", "Một bộ não mới cho mèo.",
+        self.heading(box, "06 / LOCAL FIRMWARE UPDATER", "Cập nhật firmware",
                      "Cập nhật firmware ESP32-S3 N16R8 qua Wi-Fi. Chỉ dùng trên mạng nội bộ của bạn.")
 
         summary, s = card("mintCard")
@@ -569,7 +532,7 @@ class MainWindow(QMainWindow):
         history_button = button("Đọc lịch sử cập nhật")
         history_button.clicked.connect(lambda: self.configuration_request("/api/v1/ota/history"))
         s.addWidget(history_button)
-        self.ota_check = button("⌕  KIỂM TRA OTA TRÊN ESP32")
+        self.ota_check = button("Kiểm tra thiết bị")
         self.ota_check.clicked.connect(self.check_ota_status)
         s.addWidget(self.ota_check)
         box.addWidget(summary)
@@ -580,7 +543,7 @@ class MainWindow(QMainWindow):
         self.ota_path = QLineEdit()
         self.ota_path.setPlaceholderText("firmware.bin từ PlatformIO / .pio/build/…")
         line.addWidget(self.ota_path, 1)
-        browse = button("CHỌN FILE")
+        browse = button("Chọn file")
         browse.clicked.connect(self.browse_ota_file)
         line.addWidget(browse)
         u.addLayout(line)
@@ -590,13 +553,13 @@ class MainWindow(QMainWindow):
         u.addWidget(self.ota_progress)
         self.ota_hint = text("Sau khi upload, app sẽ tự kiểm tra phân vùng mới và sức khỏe khởi động (~30–85 giây).", "subtitle", wrap=True)
         u.addWidget(self.ota_hint)
-        self.ota_start = button("↑  XÁC NHẬN VÀ CẬP NHẬT QUA WI-FI", True)
+        self.ota_start = button("Cập nhật firmware", True)
         self.ota_start.clicked.connect(self.start_ota_update)
         u.addWidget(self.ota_start)
         box.addWidget(update)
 
-        warning, w = card("focusCard")
-        w.addWidget(text("AN TOÀN / ĐỌC TRƯỚC KHI CẬP NHẬT", "eyebrow"))
+        warning = Disclosure("Thông tin kỹ thuật và phục hồi")
+        w = warning.content
         w.addWidget(text("• Lần đầu từ v1.2/huge_app phải chuyển phân vùng qua USB và sao lưu NVS.\n"
                          "• Cấp nguồn ổn định trong toàn bộ thời gian cập nhật.\n"
                          "• Đây là OTA nội bộ chưa xác minh chữ ký số; không mở cổng HTTP ra Internet.\n"
@@ -607,7 +570,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(widget)
 
     def browse_ota_file(self) -> None:
-        filename, _ = QFileDialog.getOpenFileName(self, "Chọn firmware MèoDesk", "", "ESP32 firmware (*.bin)")
+        filename, _ = QFileDialog.getOpenFileName(self, "Chọn firmware mimi.desk", "", "ESP32 firmware (*.bin)")
         if filename:
             self.ota_path.setText(filename)
 
@@ -646,7 +609,7 @@ class MainWindow(QMainWindow):
             return
         choice = QMessageBox.question(
             self, "Xác nhận cập nhật firmware",
-            f"Cập nhật MèoDesk tại {host}?\n\n{Path(image).name}\n{length / 1048576:.2f} MiB\n"
+            f"Cập nhật mimi.desk tại {host}?\n\n{Path(image).name}\n{length / 1048576:.2f} MiB\n"
             f"SHA-256: {sha[:16]}…\n\nGiữ nguồn điện ổn định. Tiếp tục?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -727,7 +690,7 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "STUDIO", "Cá nhân hóa góc bàn.",
+        self.heading(box, "STUDIO", "Studio của bạn",
                      "Cảnh, giao diện và chuyển động lấy trạng thái chung từ ESP32.")
         controls, layout = card()
         self.studio_scene = QComboBox()
@@ -851,7 +814,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(widget)
 
     def browse_catpack_file(self) -> None:
-        filename, _ = QFileDialog.getOpenFileName(self, "Bộ mèo MèoDesk", "", "MèoDesk Cat Pack (*.meocat)")
+        filename, _ = QFileDialog.getOpenFileName(self, "Bộ mèo mimi.desk", "", "mimi.desk Cat Pack (*.meocat)")
         if filename:
             self.pack_path.setText(filename)
 
@@ -898,7 +861,7 @@ class MainWindow(QMainWindow):
             goal=data.get("focus_goal",4)
             self.focus_daily.setText(f"Hôm nay · {count}/{goal} phiên · {minutes} phút. Chỉ tính phiên quan sát được khi đang kết nối.")
             if completed and self.settings.break_reminders and not data.get("quiet"):
-                self.tray.showMessage("MèoDesk · hoàn thành Focus","Đến giờ nghỉ. Đứng dậy và thư giãn một chút.",QSystemTrayIcon.MessageIcon.Information,8000)
+                self.tray.showMessage("mimi.desk · hoàn thành Focus","Đến giờ nghỉ. Đứng dậy và thư giãn một chút.",QSystemTrayIcon.MessageIcon.Information,8000)
         except (OSError,sqlite3.Error) as error:
             self.focus_daily.setText("Nhật ký tạm không khả dụng: "+str(error)[:100])
 
@@ -983,13 +946,13 @@ class MainWindow(QMainWindow):
     def export_device_config(self) -> None:
         if self.preview_mode:
             self.configuration_request("/api/v1/config"); return
-        path, _ = QFileDialog.getSaveFileName(self, "Xuất cấu hình MèoDesk", "meodesk-profile.json", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Xuất cấu hình mimi.desk", "meodesk-profile.json", "JSON (*.json)")
         if path: self.configuration_request("/api/v1/config", export_path=path)
 
     def restore_device_config(self) -> None:
         if self.preview_mode:
             self.configuration_request("/api/v1/config"); return
-        path, _ = QFileDialog.getOpenFileName(self, "Khôi phục cấu hình MèoDesk", "", "JSON (*.json)")
+        path, _ = QFileDialog.getOpenFileName(self, "Khôi phục cấu hình mimi.desk", "", "JSON (*.json)")
         if not path: return
         try:
             data = device_config.load_backup(path)
@@ -1095,11 +1058,21 @@ class MainWindow(QMainWindow):
         self.update_from_worker({"type": "device_state", "data": data, "source": "socket"})
 
     def tick_focus_display(self) -> None:
+        self.refresh_connection_badge()
         self.tick_media_display()
         self.pc_chart.update()
         seconds = self.focus_display.seconds()
         if seconds is not None:
             self.focus_clock.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
+
+    def refresh_connection_badge(self) -> None:
+        live=self.device_seen_at>0 and time.monotonic()-self.device_seen_at<6
+        caption="Xem trước · mô phỏng" if self.preview_mode else "Đã kết nối" if live else "Mất kết nối" if self.device_seen_at else "Đang kết nối…" if self.settings.host else "Chưa có thiết bị"
+        if self.connection_badge.text()!=caption:
+            self.connection_badge.setText(caption)
+            self.connection_badge.setProperty("live",live and not self.preview_mode)
+            self.connection_badge.style().unpolish(self.connection_badge)
+            self.connection_badge.style().polish(self.connection_badge)
 
     def tick_media_display(self) -> None:
         media = self.media_display.state
@@ -1223,7 +1196,7 @@ class MainWindow(QMainWindow):
     def make_tray(self) -> None:
         self.tray = QSystemTrayIcon(cat_icon(), self)
         menu = QMenu()
-        show = QAction("Mở MèoDesk Companion", self)
+        show = QAction("Mở mimi.desk Companion", self)
         show.triggered.connect(self.show_window)
         menu.addAction(show)
         toggle = QAction("Bắt đầu / Tạm dừng", self)
@@ -1234,7 +1207,7 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.quit_app)
         menu.addAction(quit_action)
         self.tray.setContextMenu(menu)
-        self.tray.setToolTip("MèoDesk Companion " + VERSION)
+        self.tray.setToolTip("mimi.desk Companion " + VERSION)
         self.tray.activated.connect(lambda reason: self.show_window()
                             if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
         if QSystemTrayIcon.isSystemTrayAvailable():
@@ -1242,8 +1215,11 @@ class MainWindow(QMainWindow):
 
     def set_tab(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        self.stack.updateGeometry()
+        self.content_scroll.verticalScrollBar().setValue(0)
+        self.page_trail.setText("mimi.desk / "+("Tổng quan","Thiết bị","Âm nhạc","Tập trung","Cài đặt","Cập nhật","Studio")[index])
         for i, nav in enumerate(self.nav):
-            nav.setProperty("chosen", i == index)
+            nav.setProperty("chosen", i == index or (index==5 and i==1))
             nav.style().unpolish(nav)
             nav.style().polish(nav)
 
@@ -1313,6 +1289,8 @@ class MainWindow(QMainWindow):
             if event.get("source") == "socket":
                 self._stream_seen_at = time.monotonic()
                 self.sync_label.setText("WebSocket · đồng bộ trực tiếp")
+            self.device_seen_at=time.monotonic()
+            self.refresh_connection_badge()
             self.studio_scene.setCurrentIndex(self.studio_scene.findData(data.get("page")))
             for action, field in (("theme", "theme"), ("fps", "fps_profile")):
                 for value, entry in enumerate(self.studio_buttons[action]):
@@ -1343,7 +1321,7 @@ class MainWindow(QMainWindow):
             self.state.setText("DEMO · XEM TRƯỚC" if self.preview_mode else "● ĐÃ KẾT NỐI")
             self.set_cat_mood(event.get("emotion", "healthy"))
             mode = "DEMO / mô phỏng" if data.get("demo") else "Dữ liệu thực"
-            self.hint.setText(f"ESP32: {event['host']}    ·    Mèo: {event['emotion']}    ·    {mode}")
+            self.hint.setText("Đang xem dữ liệu mô phỏng." if data.get("demo") else "Máy tính và thiết bị đang đồng bộ.")
             up = data.get("net_up_kbps")
             down = data.get("net_down_kbps")
             used = data.get("vram_used_gb")
@@ -1351,7 +1329,7 @@ class MainWindow(QMainWindow):
             value = lambda n: f"{n:.1f}" if n is not None else "N/A"
             self.extra_metrics.setText(f"NET ↓ {value(down)} KB/s  ↑ {value(up)} KB/s"
                                        f"   ·   VRAM {value(used)} / {value(total)} GB")
-            self.tray.setToolTip("MèoDesk · Trực tuyến")
+            self.tray.setToolTip("mimi.desk · Trực tuyến")
         elif kind == "media":
             if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
@@ -1431,7 +1409,7 @@ class MainWindow(QMainWindow):
             if kind == "error":
                 self.state.setText("○ CHƯA KẾT NỐI")
                 self.set_cat_mood("rescue")
-                self.tray.setToolTip("MèoDesk · Ngoại tuyến")
+                self.tray.setToolTip("mimi.desk · Ngoại tuyến")
 
     def set_cat_mood(self, mood: str) -> None:
         if mood == self._last_cat_emotion:
@@ -1574,6 +1552,7 @@ class MainWindow(QMainWindow):
 
     def quit_app(self) -> None:
         self._closing = True
+        if hasattr(self,"preview_graph_timer"): self.preview_graph_timer.stop()
         self.state_timer.stop()
         self.display_timer.stop()
         self.state_socket.abort()
@@ -1586,7 +1565,7 @@ class MainWindow(QMainWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("MèoDesk Companion")
+    app.setApplicationName("mimi.desk")
     app.setQuitOnLastWindowClosed(False)
     window = MainWindow(preview="--preview" in sys.argv)
     window.show()

@@ -92,3 +92,9 @@ Three expiring external-data widgets, paired feed endpoints and a stdlib Python/
 The Music scene uses the full TFT content width, a 120px album tile and embedded Noto Sans glyphs for NFC Vietnamese. Metadata redraws only when changed; the small timeline updates separately. The 64px artwork transport remains compatible. Firmware deployment and physical acceptance are still deferred.
 
 The [desktop and OTA plan](PRODUCTION_PLAN.md) proposes product naming, user-facing messages, connection lifecycle, packaging and a staged OTA experience. Branding and stable-release status are not changed by this plan.
+
+## v2.11 mimi.desk redesign
+
+The owner selected **mimi.desk** and a warm, compact, modern Web/Python UI. The new shell, task navigation, collapsed diagnostics and current-page desktop sizing are implemented; see [redesign scope](REDESIGN_V211.md). Focused checks replace a full suite for this development slice. Existing protocol/configuration identifiers remain compatible.
+
+The [server OTA proposal](SERVER_OTA_PROPOSAL.md) records the two selected policies, a single active update with a coalesced latest target, shared update coordination and a one-time bridge from the current firmware. Hosting, reader implementation and actual deployment remain separate work.
