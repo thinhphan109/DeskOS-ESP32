@@ -155,6 +155,7 @@ class MainWindow(QMainWindow):
     def __init__(self, preview: bool = False) -> None:
         super().__init__()
         self.preview_mode = preview
+        self._closing = False
         self.settings = Settings() if preview else read_settings()
         self.key = secret_store.load(self.settings.host) if self.settings.host else ""
         self.worker: CompanionWorker | None = None
@@ -1476,6 +1477,7 @@ class MainWindow(QMainWindow):
         threading.Thread(target=task, name="MeoDeskFocusControl", daemon=True).start()
 
     def start_agent(self) -> None:
+        if self._closing: return
         if self.preview_mode:
             return
         if not self.settings.host or not self.key:
@@ -1562,6 +1564,7 @@ class MainWindow(QMainWindow):
             self.quit_app()
 
     def quit_app(self) -> None:
+        self._closing = True
         self.state_timer.stop()
         self.display_timer.stop()
         self.state_socket.abort()

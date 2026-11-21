@@ -134,7 +134,9 @@ class GuiSmokeTests(unittest.TestCase):
         from companion import MainWindow
 
         app = QApplication.instance() or QApplication([])
-        win = MainWindow()
+        from companion_core import Settings
+        with patch("companion.read_settings",return_value=Settings()):
+            win = MainWindow()
         try:
             for index in range(7):
                 win.set_tab(index)

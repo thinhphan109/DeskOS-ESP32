@@ -16,6 +16,12 @@ import media_provider
 
 
 class CompanionCoreTests(unittest.TestCase):
+    def test_worker_drops_late_callbacks_after_stop(self):
+        callback=Mock(side_effect=RuntimeError("Signal source has been deleted"))
+        worker=companion_core.CompanionWorker(companion_core.Settings(),"test",callback)
+        worker.stop()
+        worker._emit({"type":"telemetry","data":{}})
+        callback.assert_not_called()
     def test_media_artwork_key_stable_and_absent_when_offline(self):
         media = {"available": True, "title": "Test", "artist": "Cat", "album": "Desk"}
         key = companion_core.media_artwork_id(media)
@@ -112,7 +118,7 @@ class CompanionCoreTests(unittest.TestCase):
 
         def collect(*_):
             count[0] += 1
-            if count[0] == 2:
+            if count[0] == 3:
                 agent._stop.set()
             return {"cpu_percent": 5, "ram_percent": 50}
 
@@ -121,7 +127,7 @@ class CompanionCoreTests(unittest.TestCase):
              patch.object(companion_core, "send_json", return_value={"ok": True}), \
              patch.object(companion_core, "NvidiaGpu"), \
              patch.object(companion_core.psutil, "cpu_percent"), \
-             patch.object(companion_core.time, "monotonic", side_effect=[100, 100, 102, 102]), \
+             patch.object(companion_core.time, "monotonic", side_effect=[100, 100, 102, 102, 104]), \
              patch.object(agent._stop, "wait"), \
              patch.object(agent, "_process_commands"), \
              patch.object(agent, "_poll_focus"), patch.object(agent, "_poll_motion"), \

@@ -170,9 +170,10 @@ class CompanionWorker:
             self._thread.join(timeout=3.0)
 
     def _emit(self, message: dict) -> None:
-        self.on_update(message)
+        if not self._stop.is_set(): self.on_update(message)
 
     def _process_commands(self, host: str) -> None:
+        if self._stop.is_set(): return
         try:
             result = json_request(host, "/api/v1/commands", self.key)
             command = result.get("command")
@@ -229,7 +230,9 @@ class CompanionWorker:
                 started = time.monotonic()
                 try:
                     data = collect_real(nvml, settings.gpu, "http://127.0.0.1:8085/data.json")
+                    if self._stop.is_set(): break
                     result = send_json(target_url(host), self.key, data, timeout=1.3)
+                    if self._stop.is_set(): break
                     if result.get("ok") is not True:
                         raise ValueError("Thiết bị từ chối dữ liệu")
                     self._emit({"type": "telemetry", "data": data, "host": host,
@@ -237,6 +240,7 @@ class CompanionWorker:
                     if settings.media and started >= next_media:
                         next_media = started + 2.0
                         song = media_provider.snapshot()
+                        if self._stop.is_set(): break
                         self._emit({"type": "media", "data": song})
                         song_id = media_artwork_id(song)
                         if song_id != self._current_song_id:
