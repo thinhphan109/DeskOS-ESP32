@@ -14,6 +14,61 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "PySide6 optional in CLI-only installation")
 class GuiSmokeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtGui import QFontDatabase
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+        # Qt's offscreen plugin on Windows does not load the native font catalog.
+        if sys.platform == "win32":
+            fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+            for filename in ("segoeui.ttf", "segoeuib.ttf"):
+                QFontDatabase.addApplicationFont(str(fonts / filename))
+
+    def test_pages_use_own_scroll_extent_after_leaving_tall_studio(self):
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from companion import MainWindow
+        from ui_theme import Disclosure
+        app = QApplication.instance() or QApplication([])
+        win = MainWindow(preview=True)
+        try:
+            win.show()
+            for width, height in ((850, 560), (1120, 760), (1440, 960)):
+                with self.subTest(size=(width, height)):
+                    win.resize(width, height)
+                    win.set_tab(6)
+                    for _ in range(4):
+                        app.processEvents()
+                    bar = win.content_scroll.verticalScrollBar()
+                    self.assertGreater(bar.maximum(), 400)
+                    bar.setValue(bar.maximum())
+                    for tab in (0, 2, 1, 3, 4):
+                        win.set_tab(tab)
+                        for _ in range(4):
+                            app.processEvents()
+                        self.assertEqual(bar.value(), 0)
+                        self.assertEqual(win.content_scroll.horizontalScrollBar().maximum(), 0)
+                        self.assertLess(bar.maximum(), 400)
+                        if height >= 760 and tab == 2:
+                            self.assertEqual(bar.maximum(), 0)
+                        if height == 960:
+                            self.assertEqual(bar.maximum(), 0)
+            win.resize(1120, 760)
+            win.set_tab(0)
+            app.processEvents()
+            diagnostics = win.stack.currentWidget().findChild(Disclosure)
+            collapsed = win.content_scroll.verticalScrollBar().maximum()
+            diagnostics.toggle.click()
+            for _ in range(4):
+                app.processEvents()
+            self.assertGreater(win.content_scroll.verticalScrollBar().maximum(), collapsed)
+            diagnostics.toggle.click()
+            QTest.qWait(10)
+            self.assertEqual(win.content_scroll.verticalScrollBar().maximum(), collapsed)
+        finally:
+            win.quit_app()
+
     def test_wheel_over_inputs_scrolls_page_without_changing_values(self):
         from PySide6.QtCore import QPoint, QPointF, Qt
         from PySide6.QtGui import QWheelEvent

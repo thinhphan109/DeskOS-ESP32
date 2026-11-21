@@ -2,7 +2,7 @@
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QFrame, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QPushButton, QStackedLayout, QVBoxLayout, QWidget
 
 QSS = """
 QMainWindow,QWidget#root,QWidget#content,QWidget#tabPage,QStackedWidget,QScrollArea {
@@ -80,13 +80,50 @@ def nav_icon(name: str) -> QIcon:
     return QIcon(pixmap)
 
 
-class ContentStack(QStackedWidget):
-    """A short page must not inherit the tall Scene editor's scroll extent."""
+class _CurrentPageLayout(QStackedLayout):
+    """Measure only the visible page, including wrapped text's height for width."""
     def sizeHint(self):
         return self.currentWidget().sizeHint() if self.currentWidget() else QSize(600,400)
 
-    def minimumSizeHint(self):
-        return self.currentWidget().minimumSizeHint() if self.currentWidget() else QSize(0,0)
+    def minimumSize(self):
+        page = self.currentWidget()
+        return page.minimumSizeHint().expandedTo(page.minimumSize()) if page else QSize(0,0)
+
+    def hasHeightForWidth(self):
+        return bool(self.currentWidget() and self.currentWidget().hasHeightForWidth())
+
+    def heightForWidth(self, width):
+        page = self.currentWidget()
+        if page is None:
+            return -1
+        return page.heightForWidth(width) if page.hasHeightForWidth() else page.sizeHint().height()
+
+
+class ContentStack(QWidget):
+    """Keep inactive editors alive without adding their height to other pages."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._pages = _CurrentPageLayout(self)
+        self._pages.setContentsMargins(0, 0, 0, 0)
+        self._pages.currentChanged.connect(self.updateGeometry)
+
+    def addWidget(self, widget):
+        return self._pages.addWidget(widget)
+
+    def setCurrentIndex(self, index):
+        self._pages.setCurrentIndex(index)
+
+    def currentIndex(self):
+        return self._pages.currentIndex()
+
+    def currentWidget(self):
+        return self._pages.currentWidget()
+
+    def count(self):
+        return self._pages.count()
+
+    def widget(self, index):
+        return self._pages.widget(index)
 
 
 class Disclosure(QFrame):

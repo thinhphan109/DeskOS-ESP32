@@ -21,6 +21,8 @@ Content uses 16–24px internal spacing and 20px section gaps. Keep related fiel
 
 Desktop pages use a current-page size hint, not the tallest editor's height. Cards prefer their content height and do not consume spare vertical space. The Music page should not inherit Studio's scroll extent.
 
+The desktop stack's layout measures minimum size and height-for-width from the active page only. Overriding the outer widget's size hint is insufficient: Qt's stacked layout also measures wrapped text across hidden pages. Keep inactive widgets alive to preserve drafts, reset scroll on navigation, and let disclosures resize the current page.
+
 ## States and language
 
 Use clear Vietnamese for navigation, actions, empty states and normal status. Preserve arbitrary track names, user-entered labels and technical identifiers. DEMO remains conspicuous wherever data is simulated. Connection status is based on a recent device response, not a socket-open event; stale responses lose the connected badge after six seconds.

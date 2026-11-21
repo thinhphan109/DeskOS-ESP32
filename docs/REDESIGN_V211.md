@@ -33,6 +33,16 @@ Kiểm tra bổ sung: 7 bài smoke GUI đã qua, gồm mở chế độ thật t
 
 Đã chặn cuộn chuột làm đổi lựa chọn hoặc giá trị số trên app Windows, kể cả khi ô đang có focus. Áp dụng cho cảnh TFT, bốn cảnh yêu thích, các trường Scene Editor và thời lượng tập trung. Cuộn trên ô đóng được chuyển tới trang; danh sách đang mở vẫn cuộn và chọn bằng click như bình thường. Giữ nguyên thao tác bằng bàn phím. Chín kiểm thử GUI đã qua, gồm kiểm tra trang thực sự cuộn, giá trị không đổi, chọn bằng phím và cuộn/chọn trong danh sách mở. Mở lại app để nhận thay đổi; không cần OTA firmware.
 
+## Sửa khoảng trống khi cuộn trang desktop
+
+Đã tái hiện lỗi Tổng quan/Âm nhạc bị kéo cao theo Studio: Qt lấy chiều cao theo độ rộng của các trang ẩn, dù widget ngoài đã có size hint riêng. Vùng nội dung Tổng quan từng cao 1.626 px trong cửa sổ 1.120 × 760 px, dẫn đến cuộn xuống vùng trống lớn.
+
+Đã thay layout của vùng trang để chỉ đo trang đang mở, bao gồm chữ xuống dòng. Giữ các trang ẩn và bản nháp trong bộ nhớ. Thanh cuộn trở về đầu khi đổi mục; mở/thu gọn Chẩn đoán cập nhật lại chiều cao. Rà soát cả bảy trang ở 850 × 560, 1.120 × 840 và 1.440 × 960: không có cuộn ngang; trang ngắn không còn nhận chiều cao Studio. Cửa sổ nhỏ vẫn cuộn dọc khi nội dung vượt vùng nhìn.
+
+Mười kiểm thử GUI đã qua, gồm hồi quy chuyển Studio → trang ngắn, vị trí cuộn, co giãn cửa sổ và mở/thu gọn Chẩn đoán. Đã xem ảnh render Qt của Tổng quan, Âm nhạc ở cửa sổ nhỏ và Studio. Ảnh dưới dùng dữ liệu DEMO; chưa kiểm tra phần cứng trong lượt này.
+
+![Desktop sau khi sửa chiều cao trang](mimi-desktop-layout-v211.png)
+
 ## Chưa triển khai
 
 Chưa OTA lên thiết bị, chưa phát hành binary lên server, chưa tự cập nhật EXE Windows và chưa đổi bootloader/phân vùng. `MeoDesk` trong định danh giao thức, đường dẫn dữ liệu và tên package cũ là tương thích kỹ thuật, không phải tên hiển thị bị bỏ sót.
