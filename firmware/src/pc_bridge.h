@@ -6,6 +6,7 @@
 #include "core/device_profile.h"
 #include "core/scene_layout.h"
 #include "core/event_engine.h"
+#include "core/automation_rules.h"
 
 struct PcTelemetry {
   bool received = false;
@@ -50,6 +51,8 @@ extern MediaState pcMedia;
 const DeviceProfile &pcBridgeProfile();
 const SceneLayout &pcBridgeSceneLayout();
 const EventEngine::Event *pcBridgeActiveEvent();
+const RuleSet &pcBridgeRules();
+uint32_t pcBridgeRulesRevision();
 // Cover art is volatile PSRAM/internal SRAM, 64x64 RGB565, owned by the bridge. The pointer
 // must only be used on the Arduino main loop (HTTP and TFT are serviced there).
 const uint16_t *pcBridgeArtworkPixels();

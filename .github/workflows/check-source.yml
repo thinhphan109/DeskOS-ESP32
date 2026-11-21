@@ -15,7 +15,7 @@ jobs:
       - run: python -m unittest discover -s windows_agent/tests -q
       - name: Native domain tests
         run: |
-          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life theme_palette media_timeline desk_notification; do
+          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life theme_palette media_timeline desk_notification automation_rules; do
             g++ -std=c++17 -Wall -Wextra -Werror firmware/tools/test_${test}.cpp -o /tmp/meodesk-${test}
             /tmp/meodesk-${test}
           done
@@ -32,6 +32,7 @@ jobs:
           node firmware/tools/test_web_scene.js
           node firmware/tools/test_web_media.js
           node firmware/tools/test_web_notification.js
+          node firmware/tools/test_web_rules.js
   firmware:
     runs-on: ubuntu-latest
     steps:

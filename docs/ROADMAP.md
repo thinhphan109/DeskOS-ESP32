@@ -74,3 +74,7 @@ Observed Focus completions, local daily journal, opt-in break reminders and expl
 ## v2.7 source checkpoint
 
 Bounded notifications, private-by-default first-party payloads, quiet/priority/TTL policy and a small TFT event strip are implemented. See [Context and notifications](CONTEXT_NOTIFICATIONS_V27.md). OS notification capture remains an optional integration.
+
+## v2.8 source checkpoint
+
+Six bounded rules, dwell/cooldown/latch semantics, atomic profile backup and synchronized advanced JSON editors are implemented. See [Automation](AUTOMATION_V28.md).

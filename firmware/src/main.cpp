@@ -118,6 +118,9 @@ FocusTimer focusTimer;
 uint32_t focusCompletedTotal=0;
 uint8_t focusLastCompletedMin=0;
 uint32_t noticeShownSeq=0xffffffffUL;
+AutomationRules automationRules;
+uint32_t lastRulesTickMs=0,activeRulesRevision=0xffffffffUL;
+int8_t lastRuleFired=-1;
 bool colorTestActive = false;
 bool otaScreenActive = false;
 uint8_t themeChoice = 0; // 0 Cozy Day / 1 Midnight / 2 Auto by local NTP hour.
@@ -1253,7 +1256,31 @@ bool webControl(const String &action, int value) {
   return false;
 }
 
+void runAutomations(uint32_t now) {
+  if(static_cast<uint32_t>(now-lastRulesTickMs)<1000UL)return;
+  lastRulesTickMs=now;
+  if(activeRulesRevision!=pcBridgeRulesRevision()) {
+    automationRules.reset();activeRulesRevision=pcBridgeRulesRevision();lastRuleFired=-1;
+  }
+  RuleContext ctx;ctx.realPc=pcTelemetryFresh()&&!pcTelemetry.demo;
+  if(ctx.realPc){ctx.cpu=pcTelemetry.cpuPercent;ctx.gpu=pcTelemetry.gpuPercent;ctx.idleSeconds=pcTelemetry.idleSeconds;ctx.playing=pcMedia.playingNow(now);}
+  ctx.focusCompleted=focusCompletedTotal;ctx.quiet=healthSettings.quiet;
+  tm local{};
+  if(realClock(local)){ctx.hour=local.tm_hour;ctx.localDay=static_cast<uint32_t>(local.tm_year*366+local.tm_yday+1);}
+  const auto &set=pcBridgeRules();const uint8_t fired=automationRules.sample(set,ctx,now);
+  for(uint8_t i=0;i<set.count;++i)if(fired&(1U<<i)) {
+    const auto &rule=set.rules[i];lastRuleFired=i;
+    switch(rule.action) {
+      case RuleDo::SCENE:webControl("page",rule.value);break;
+      case RuleDo::THEME:if(themeChoice!=rule.value)webControl("theme",rule.value);break;
+      case RuleDo::CELEBRATE:petEngine.celebrate(now);break;
+      case RuleDo::NOTIFY:{char code[16];snprintf(code,sizeof(code),"rule_%u",i);pcBridgePushEvent(code,rule.label,1,8000);break;}
+    }
+  }
+}
+
 void webUiStatus(JsonDocument &doc) {
+  doc["rules_count"]=pcBridgeRules().count;doc["rule_last_fired"]=lastRuleFired;
   doc["lab_enabled"] = performanceLab.enabled();
   doc["lab_valid"] = performanceLab.valid();
   doc["lab_payload_coverage"] = "cat_dma+buffered_card+album_only";
@@ -1490,6 +1517,8 @@ void loop() {
       }
     }
   }
+
+  runAutomations(now);
 
   if (autoPages && now - pageStartedMs >= PAGE_DURATION_MS &&
       !focusTimer.running()) {

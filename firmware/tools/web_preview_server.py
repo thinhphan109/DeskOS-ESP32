@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / "windows_agent"))
+from automation_rules import validate_rules
 from desk_notification import notification_payload
 from device_config import validate_backup
 from scene_layout import DEFAULT_LAYOUT, validate_layout
@@ -42,7 +43,7 @@ def current_web() -> bytes:
 START = time.monotonic()
 MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", "hotspot"]
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
-STATE = {"scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
+STATE = {"rules": {"schema":1,"rules":[]}, "rules_revision":0, "scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
          "lab_enabled": False,
          "focus_completed_total": 0, "focus_last_completed_min": 0, "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
          "scene_slots": [12, 0, 5, 2],
@@ -175,6 +176,8 @@ class Handler(BaseHTTPRequestHandler):
                                "events": [{"seq": 1, "code": "demo", "priority": 0,
                                            "message": "SIMULATED event / not hardware", "age_ms": 2500,
                                            "ttl_ms": 8000}]})
+        if url.path == "/api/v1/rules":
+            return self.reply(STATE["rules"])
         if url.path == "/api/v1/scene-layout":
             return self.reply(STATE["scene_layout"])
         if url.path == "/api/v1/focus":
@@ -189,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
             return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1"],
+                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1", "automation_rules_v1"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -213,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
                                "motion_pc_intensity": 0,  # DEMO is NOT real CPU/GPU input.
                                "cat_energy": STATE["pet_energy"],
                                "scene_slots": STATE["scene_slots"], "artwork_ready": False,
-                               "scene_layout_revision": STATE["scene_layout_revision"], "page": STATE["page"], "page_count": 15,
+                               "rules_revision": STATE["rules_revision"], "rules_count": len(STATE["rules"]["rules"]), "scene_layout_revision": STATE["scene_layout_revision"], "page": STATE["page"], "page_count": 15,
                                "media_available": True, "media_playing": True,
                                "command_pending": False, "command_seq": STATE["command_seq"],
                                "command_acknowledged": STATE["command_acknowledged"],
@@ -239,7 +242,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/v1/config":
             profile = {key: STATE[key] for key in ("theme", "fps_profile", "motion_style", "motion", "auto_pages", "focus_work_min", "focus_break_min", "focus_goal")}
             profile.update(STATE["settings"], scene_slots=list(STATE["scene_slots"]))
-            return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8", "firmware_version": VERSION + "-mock", "profile": profile, "scene_layout": STATE["scene_layout"]})
+            return self.reply({"schema": 1, "board": "meodesk-esp32s3-n16r8", "firmware_version": VERSION + "-mock", "profile": profile, "scene_layout": STATE["scene_layout"], "rules": STATE["rules"]})
         if url.path == "/api/v1/ota/history":
             return self.reply({"schema": 1, "updates": [], "mode": "demo"})
         return self.reply({"ok": False, "error": "not found"}, 404)
@@ -252,10 +255,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/v1/artwork":
             return self.reply({"ok": False, "error": "mock does not accept real cover uploads"}, 501)
         try:
-            data = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 2000)))
+            length=int(self.headers.get("Content-Length","0"))
+            if not 0<length<=4096:return self.reply({"ok":False,"error":"body must be 1..4096 bytes"},413)
+            data = json.loads(self.rfile.read(length))
             if self.path == "/api/v1/config":
                 backup = validate_backup(data)
                 clean = backup["profile"]
+                if "rules" in backup:
+                    STATE["rules"]=backup["rules"];STATE["rules_revision"]+=1
                 if "scene_layout" in backup:
                     STATE["scene_layout"] = backup["scene_layout"]
                     STATE["scene_layout_revision"] += 1
@@ -265,6 +272,9 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["settings"].update({key: clean[key] for key in STATE["settings"]})
                 STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=clean["focus_work_min"]*60)
                 return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+            if self.path == "/api/v1/rules":
+                STATE["rules"]=validate_rules(data);STATE["rules_revision"]+=1
+                return self.reply({"ok":True,"persisted":False,"mode":"demo"})
             if self.path == "/api/v1/notifications":
                 notification_payload(data.get("text",""),data.get("hidden",True),data.get("source",""),data.get("ttl_s",8),data.get("priority",1))
                 return self.reply({"ok": True, "suppressed": STATE["settings"]["quiet"], "mode": "demo"})

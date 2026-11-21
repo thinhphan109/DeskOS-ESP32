@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from scene_layout import validate_layout
+from automation_rules import validate_rules
 
 BOARD = "meodesk-esp32s3-n16r8"
 RANGES = {"theme": (0, 5), "fps_profile": (0, 3), "motion_style": (0, 2),
@@ -27,6 +28,8 @@ def validate_backup(data: dict) -> dict:
         raise ValueError("Choose four different valid scenes")
     # Only an allowlisted envelope ever reaches disk or the device.
     result = {"schema": 1, "board": BOARD, "profile": dict(profile, scene_slots=list(scenes))}
+    if "rules" in data:
+        result["rules"] = validate_rules(data["rules"])
     if "scene_layout" in data:
         result["scene_layout"] = validate_layout(data["scene_layout"])
     if isinstance(data.get("firmware_version"), str):

@@ -1,0 +1,10 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const source=fs.readFileSync(require('path').join(__dirname,'../src/web_ui.h'),'utf8').split('// RULE_CONTRACT_BEGIN')[1].split('// RULE_CONTRACT_END')[0];
+const validate=vm.runInNewContext(source+';validateRules;');
+const rule={enabled:true,when:'cpu_above',threshold:90,hold_s:30,cooldown_s:300,do:'notify',value:0,label:'CPU busy'};
+assert.equal(validate({schema:1,rules:[]}).rules.length,0);
+assert.equal(validate({schema:1,rules:[rule]}).rules[0].threshold,90);
+for(const [key,value] of [['enabled',1],['threshold',101],['hold_s',601],['cooldown_s',0],['do','shell'],['value',1],['label','Mèo']])assert.throws(()=>validate({schema:1,rules:[{...rule,[key]:value}]}));
+assert.throws(()=>validate({schema:1,rules:[{...rule,when:'focus_complete',threshold:0,hold_s:1}]}));
+assert.throws(()=>validate({schema:1,rules:Array(7).fill(rule)}));
+console.log('OK: browser automation contract, limits, permitted conditions/actions and ASCII');

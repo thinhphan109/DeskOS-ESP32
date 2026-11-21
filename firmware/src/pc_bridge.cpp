@@ -67,9 +67,13 @@ static bool prefsReady = false;
 static DeviceProfile deviceProfile;
 static SceneLayout sceneLayout;
 static uint32_t sceneLayoutRevision=0;
+static RuleSet deviceRules;
+static uint32_t rulesRevision=0;
 const DeviceProfile &pcBridgeProfile() { return deviceProfile; }
 const SceneLayout &pcBridgeSceneLayout() { return sceneLayout; }
-static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout = nullptr);
+const RuleSet &pcBridgeRules() { return deviceRules; }
+uint32_t pcBridgeRulesRevision() { return rulesRevision; }
+static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout = nullptr, const RuleSet *rules = nullptr);
 static UiControlCallback controlHandler = nullptr;
 static UiStatusCallback statusHandler = nullptr;
 static UiPerformanceCallback performanceHandler = nullptr;
@@ -421,6 +425,37 @@ static bool decodeLayout(JsonObjectConst input, SceneLayout &layout) {
   return layout.valid();
 }
 
+static const char *ruleWhens[]={"cpu_above","gpu_above","hour","focus_complete","idle_above","music_playing"};
+static const char *ruleActions[]={"scene","theme","celebrate","notify"};
+static void encodeRules(JsonObject out,const RuleSet &set) {
+  out["schema"]=1;JsonArray list=out["rules"].to<JsonArray>();
+  for(uint8_t i=0;i<set.count;++i) {
+    const auto &r=set.rules[i];JsonObject item=list.add<JsonObject>();
+    item["enabled"]=r.enabled;item["when"]=ruleWhens[static_cast<uint8_t>(r.when)];
+    item["threshold"]=r.threshold;item["hold_s"]=r.holdSeconds;item["cooldown_s"]=r.cooldownSeconds;
+    item["do"]=ruleActions[static_cast<uint8_t>(r.action)];item["value"]=r.value;item["label"]=r.label;
+  }
+}
+static bool decodeRules(JsonObjectConst input,RuleSet &set) {
+  if(!input["schema"].is<int>()||input["schema"]!=1||!input["rules"].is<JsonArrayConst>()||input["rules"].size()>RuleSet::CAPACITY)return false;
+  set.count=input["rules"].size();
+  for(uint8_t i=0;i<set.count;++i) {
+    JsonObjectConst item=input["rules"][i];
+    if(!item["enabled"].is<bool>()||!item["when"].is<const char*>()||!item["do"].is<const char*>()||
+       !item["label"].is<const char*>()||strlen(item["label"].as<const char*>())>32)return false;
+    int when=-1,action=-1;
+    for(int j=0;j<6;++j)if(!strcmp(item["when"].as<const char*>(),ruleWhens[j]))when=j;
+    for(int j=0;j<4;++j)if(!strcmp(item["do"].as<const char*>(),ruleActions[j]))action=j;
+    if(when<0||action<0)return false;
+    for(const char *key:{"threshold","hold_s","cooldown_s","value"})if(!item[key].is<int>()||item[key].as<int>()<0)return false;
+    if(item["threshold"].as<int>()>7200||item["hold_s"].as<int>()>600||item["cooldown_s"].as<int>()>86400||item["value"].as<int>()>14)return false;
+    auto &r=set.rules[i];r.enabled=item["enabled"];r.when=static_cast<RuleWhen>(when);r.action=static_cast<RuleDo>(action);
+    r.threshold=item["threshold"];r.holdSeconds=item["hold_s"];r.cooldownSeconds=item["cooldown_s"];r.value=item["value"];
+    snprintf(r.label,sizeof(r.label),"%s",item["label"].as<const char*>());
+  }
+  return set.valid();
+}
+
 static bool decodeProfile(JsonObjectConst in, DeviceProfile &p) {
   const char *numbers[] = {"theme", "fps_profile", "motion_style", "focus_work_min",
     "focus_break_min", "focus_goal", "cpu_limit", "gpu_limit", "temp_limit", "battery_limit"};
@@ -440,11 +475,12 @@ static bool decodeProfile(JsonObjectConst in, DeviceProfile &p) {
   return p.valid();
 }
 
-static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout) {
+static bool persistProfile(const DeviceProfile &profile, const SceneLayout *layout, const RuleSet *rules) {
   if (!prefsReady || !profile.valid()) return false;
   JsonDocument doc; doc["schema"] = DeviceProfile::SCHEMA;
   encodeProfile(doc["profile"].to<JsonObject>(), profile);
   encodeLayout(doc["scene_layout"].to<JsonObject>(), layout ? *layout : sceneLayout);
+  encodeRules(doc["rules"].to<JsonObject>(),rules ? *rules : deviceRules);
   String data; serializeJson(doc, data);
   // One NVS value: a failed write cannot partially restore individual fields.
   if (prefs.getString("profile_v1", "") == data) return true;
@@ -483,6 +519,7 @@ static void exportConfiguration() {
   doc["firmware_version"] = MEO_VERSION;
   encodeProfile(doc["profile"].to<JsonObject>(), deviceProfile);
   encodeLayout(doc["scene_layout"].to<JsonObject>(), sceneLayout);
+  encodeRules(doc["rules"].to<JsonObject>(),deviceRules);
   replyJson(200, doc);
 }
 
@@ -533,7 +570,7 @@ static void sendOtaHistory() {
 static void importConfiguration() {
   if (!authorized()) return;
   const String payload = httpServer.arg("plain");
-  if (payload.length() == 0 || payload.length() > 2048) { replyError(413, "configuration must be 1..2048 bytes"); return; }
+  if (payload.length() == 0 || payload.length() > 4096) { replyError(413, "configuration must be 1..4096 bytes"); return; }
   JsonDocument input;
   DeviceProfile candidate;
   if (deserializeJson(input, payload) || !input["schema"].is<int>() || input["schema"] != DeviceProfile::SCHEMA ||
@@ -544,10 +581,13 @@ static void importConfiguration() {
   SceneLayout candidateLayout=sceneLayout;
   if(!input["scene_layout"].isNull() &&
      !decodeLayout(input["scene_layout"].as<JsonObjectConst>(),candidateLayout)) { replyError(400,"invalid scene layout"); return; }
-  if (!persistProfile(candidate,&candidateLayout)) { replyError(507, "configuration was not persisted; current settings retained"); return; }
+  RuleSet candidateRules=deviceRules;
+  if(!input["rules"].isNull() && !decodeRules(input["rules"].as<JsonObjectConst>(),candidateRules)) { replyError(400,"invalid automation rules"); return; }
+  if (!persistProfile(candidate,&candidateLayout,&candidateRules)) { replyError(507, "configuration was not persisted; current settings retained"); return; }
   deviceProfile = candidate;
   sceneLayout = candidateLayout;
   ++sceneLayoutRevision;
+  deviceRules=candidateRules;if(!input["rules"].isNull())++rulesRevision;
   applyProfileMetadata();
   controlHandler("profile", 0);
   JsonDocument result; result["ok"] = true; result["persisted"] = true;
@@ -592,6 +632,22 @@ static void importSceneLayout() {
   sceneLayout=candidate; ++sceneLayoutRevision;
   if(controlHandler) controlHandler("refresh",0);
   JsonDocument doc; doc["ok"]=true; doc["persisted"]=true; replyJson(200,doc);
+}
+
+static void exportRules() {
+  if(!authorized())return;
+  JsonDocument result;encodeRules(result.to<JsonObject>(),deviceRules);replyJson(200,result);
+}
+static void importRules() {
+  if(!authorized())return;
+  const String payload=httpServer.arg("plain");JsonDocument body;RuleSet candidate;
+  if(payload.length()>2048||deserializeJson(body,payload)||!decodeRules(body.as<JsonObjectConst>(),candidate)) {
+    replyError(400,"invalid rules: at most six bounded conditions/actions");return;
+  }
+  captureRuntimeProfile();
+  if(!persistProfile(deviceProfile,nullptr,&candidate)){replyError(507,"rules were not persisted");return;}
+  deviceRules=candidate;++rulesRevision;
+  JsonDocument result;result["ok"]=true;result["persisted"]=true;replyJson(200,result);
 }
 
 static bool validPercent(float value) {
@@ -955,6 +1011,7 @@ static void fillStatus(JsonDocument &doc) {
   doc["version"] = MEO_VERSION;
   doc["state_revision"] = stateRevision;
   doc["scene_layout_revision"] = sceneLayoutRevision;
+  doc["rules_revision"]=rulesRevision;
   doc["state_boot_id"] = stateBootId;
   doc["device"] = "MEO DESK";
   doc["api_version"] = 1;
@@ -971,6 +1028,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("focus_sync");
   capabilities.add("focus_completion_cursor_v1");
   capabilities.add("notifications_v1");
+  capabilities.add("automation_rules_v1");
   capabilities.add("tft_themes");
   capabilities.add("scene_shortcuts_v1");
   capabilities.add("cat_behavior_v1");
@@ -1601,9 +1659,10 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
     const String data = prefs.getString("profile_v1", "");
     if (data.length() && !deserializeJson(stored, data) && stored["schema"] == DeviceProfile::SCHEMA &&
         decodeProfile(stored["profile"].as<JsonObjectConst>(), canonical)) {
-      SceneLayout savedLayout;
-      if(stored["scene_layout"].isNull() || decodeLayout(stored["scene_layout"].as<JsonObjectConst>(),savedLayout)) {
-        deviceProfile=canonical; sceneLayout=savedLayout;
+      SceneLayout savedLayout;RuleSet savedRules;
+      if((stored["scene_layout"].isNull() || decodeLayout(stored["scene_layout"].as<JsonObjectConst>(),savedLayout)) &&
+         (stored["rules"].isNull() || decodeRules(stored["rules"].as<JsonObjectConst>(),savedRules))) {
+        deviceProfile=canonical; sceneLayout=savedLayout;deviceRules=savedRules;
       }
     }
     const String history = prefs.getString("ota_history", "[]");
@@ -1652,6 +1711,8 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/artwork.bmp", HTTP_GET, sendArtworkBmp);
   httpServer.on("/api/v1/events", HTTP_GET, sendEvents);
   httpServer.on("/api/v1/notifications", HTTP_POST, receiveNotification);
+  httpServer.on("/api/v1/rules",HTTP_GET,exportRules);
+  httpServer.on("/api/v1/rules",HTTP_POST,importRules);
   httpServer.on("/api/v1/focus", HTTP_GET, sendFocus);
   httpServer.on("/api/v1/focus", HTTP_POST, receiveFocus);
   httpServer.on("/api/v1/focus/config", HTTP_POST, configureFocus);

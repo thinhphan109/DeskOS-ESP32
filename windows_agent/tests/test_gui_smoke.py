@@ -14,6 +14,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "PySide6 optional in CLI-only installation")
 class GuiSmokeTests(unittest.TestCase):
+    def test_rule_editor_invalid_draft_and_remote_preservation(self):
+        from PySide6.QtWidgets import QApplication
+        from rule_editor import RuleEditor
+        from automation_rules import PRESET
+        app=QApplication.instance() or QApplication([])
+        editor=RuleEditor();editor.preset();self.assertTrue(editor.dirty)
+        editor.set_data({'schema':1,'rules':[]})
+        self.assertEqual(editor.data(),PRESET)
+        editor.editor.setPlainText('{invalid')
+        self.assertFalse(editor.save_button.isEnabled())
+        editor.set_data({'schema':1,'rules':[]},force=True)
+        self.assertTrue(editor.save_button.isEnabled());editor.close()
     def test_scene_editor_validates_moves_and_keeps_dirty_draft(self):
         from PySide6.QtWidgets import QApplication
         from scene_editor import SceneEditor

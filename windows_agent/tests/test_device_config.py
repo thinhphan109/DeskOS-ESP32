@@ -14,6 +14,12 @@ def backup():
         "cpu_limit": 88, "gpu_limit": 92, "temp_limit": 80, "battery_limit": 20}}
 
 class ConfigTests(unittest.TestCase):
+    def test_rules_backup_roundtrip(self):
+        from automation_rules import PRESET
+        data=backup();data['rules']=PRESET
+        self.assertEqual(device_config.validate_backup(data)['rules'],PRESET)
+        data['rules']={'schema':1,'rules':[{}]}
+        with self.assertRaises(ValueError):device_config.validate_backup(data)
     def test_layout_backup_and_legacy_restore(self):
         from scene_layout import DEFAULT_LAYOUT
         data = backup()

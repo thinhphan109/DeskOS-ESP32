@@ -34,6 +34,8 @@ from telemetry_chart import TelemetryChart
 from focus_journal import FocusJournal
 import startup
 from desk_notification import notification_payload
+from rule_editor import RuleEditor
+from automation_rules import validate_rules
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings, user_config_path
 from state_sync import StateCursor, FocusDisplay, MediaDisplay
@@ -779,6 +781,11 @@ class MainWindow(QMainWindow):
         self.scene_editor.apply_requested.connect(self.save_widget_layout)
         scene_box.addWidget(self.scene_editor)
         box.addWidget(scene_panel)
+        self.rule_editor=RuleEditor()
+        self.rules_revision=None;self.rules_pending=False;self.rules_retry_at=0.0
+        self.rule_editor.reload_requested.connect(lambda:self.request_rules(force=True))
+        self.rule_editor.save_requested.connect(lambda data:self.request_rules(payload=data))
+        box.addWidget(self.rule_editor)
 
         details, d = card("focusCard")
         d.addWidget(text("CAT COLLECTION / ACTIVE BANK", "eyebrow"))
@@ -945,6 +952,25 @@ class MainWindow(QMainWindow):
             except (OSError, ValueError, TimeoutError) as error:
                 self.bus.status.emit({"type":"scene_error", "host":host, "message":str(error)[:160]})
         threading.Thread(target=task,name="MeoDeskSceneSave",daemon=True).start()
+
+    def request_rules(self,payload=None,force=False) -> None:
+        if self.preview_mode:
+            if payload is not None:self.rule_editor.dirty=False
+            self.rule_editor.hint.setText("DEMO · quy tắc chỉ được giữ trong bản xem trước.");return
+        if self.rules_pending:return
+        host,key=self.settings.host,self.key
+        if not host or not key:
+            self.rule_editor.hint.setText("Nhập IP và pairing key ở tab Thiết bị.");return
+        before=self.rule_editor.editor.toPlainText();self.rules_pending=True
+        def task():
+            try:
+                result=json_request(host,"/api/v1/rules",key,payload,timeout=2.0)
+                if payload is not None and result.get("ok") is not True:raise ValueError("Thiết bị chưa lưu quy tắc.")
+                data=validate_rules(payload if payload is not None else result)
+                self.bus.status.emit(dict(type="rules_result",host=host,data=data,saved=payload is not None,force=force,before=before))
+            except (OSError,ValueError,TimeoutError) as error:
+                self.bus.status.emit(dict(type="rules_error",host=host,message=str(error)[:160]))
+        threading.Thread(target=task,name="MeoDeskRules",daemon=True).start()
 
     def export_device_config(self) -> None:
         if self.preview_mode:
@@ -1213,6 +1239,20 @@ class MainWindow(QMainWindow):
 
     def update_from_worker(self, event: dict) -> None:
         kind = event.get("type")
+        if kind in ("rules_result","rules_error"):
+            if event.get("host")!=self.settings.host:return
+            self.rules_pending=False
+            if kind=="rules_error":
+                self.rules_revision=None;self.rules_retry_at=time.monotonic()+5;self.rule_editor.hint.setText(event["message"])
+            elif event["saved"]:
+                try:unchanged=self.rule_editor.data()==event["data"]
+                except ValueError:unchanged=False
+                if unchanged:self.rule_editor.dirty=False
+                self.rule_editor.hint.setText("Đã lưu quy tắc." if unchanged else "Đã lưu. Thay đổi mới trong bản nháp chưa được gửi.")
+                self.refresh_device_state()
+            else:
+                self.rule_editor.set_data(event["data"],force=event["force"] and self.rule_editor.editor.toPlainText()==event["before"])
+            return
         if kind in ("scene_layout", "scene_saved", "scene_error"):
             if event.get("host") != self.settings.host: return
             self.scene_request_pending = False
@@ -1242,6 +1282,10 @@ class MainWindow(QMainWindow):
                 self.worker.reset_device_session()
             self._stream_supported = "state_websocket_v1" in data.get("capabilities", [])
             self.observe_focus_completion(data)
+            rules_revision=(self.settings.host,data.get("state_boot_id"),data.get("rules_revision"))
+            if ("automation_rules_v1" in data.get("capabilities",[]) and rules_revision!=self.rules_revision
+                    and self.key and not self.rules_pending and time.monotonic()>=self.rules_retry_at):
+                self.rules_revision=rules_revision;self.request_rules()
             scene_revision = (self.settings.host, data.get("state_boot_id"), data.get("scene_layout_revision"))
             if ("widget_scene_v1" in data.get("capabilities",[]) and scene_revision != self.scene_revision
                     and self.key and not self.scene_request_pending and time.monotonic() >= self.scene_retry_at):

@@ -393,6 +393,86 @@
         }
       },
       "description": "Application validation also enforces boundaries and no overlap."
+    },
+    "automation_rules": {
+      "type": "object",
+      "required": [
+        "schema",
+        "rules"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": [
+              "enabled",
+              "when",
+              "threshold",
+              "hold_s",
+              "cooldown_s",
+              "do",
+              "value",
+              "label"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "when": {
+                "enum": [
+                  "cpu_above",
+                  "gpu_above",
+                  "hour",
+                  "focus_complete",
+                  "idle_above",
+                  "music_playing"
+                ]
+              },
+              "threshold": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7200
+              },
+              "hold_s": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600
+              },
+              "cooldown_s": {
+                "type": "integer",
+                "minimum": 5,
+                "maximum": 86400
+              },
+              "do": {
+                "enum": [
+                  "scene",
+                  "theme",
+                  "celebrate",
+                  "notify"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 14
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "^[ -~]+$"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "description": "The application enforces condition-specific threshold/hold limits and action-specific value ranges."
     }
   }
 }
