@@ -27,6 +27,7 @@ jobs:
         run: |
           node firmware/tools/test_web_sha.js
           node firmware/tools/test_web_boot.js
+          node firmware/tools/test_web_update.js
           node firmware/tools/test_web_catpack.js
           node firmware/tools/test_web_sync.js
           node firmware/tools/test_web_scene.js

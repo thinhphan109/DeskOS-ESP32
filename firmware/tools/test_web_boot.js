@@ -10,7 +10,7 @@ const script = raw.match(/<script>([\s\S]*?)<\/script>/);
 assert(script, 'Embedded HTML needs one app script');
 new vm.Script(script[1]); // Validate all embedded script syntax.
 
-const begin = raw.indexOf('async function verifyOtaBoot(targetSlot){');
+const begin = raw.indexOf('async function verifyOtaBoot(targetSlot,expected={}){');
 const end = raw.indexOf('async function uploadOta(){', begin);
 assert(begin > 0 && end > begin, 'OTA Guardian function missing');
 const source = raw.slice(begin, end) + '\nverifyOtaBoot;';

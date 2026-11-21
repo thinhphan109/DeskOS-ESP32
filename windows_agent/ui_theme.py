@@ -44,6 +44,7 @@ QPushButton#secondary:hover { background:#edf3e5; border-color:#91a77d; }
 QPushButton#disclosureToggle { background:transparent; text-align:left; border:0; padding:12px 14px; color:#405b45; font-weight:600; }
 QPushButton:checked { background:#dceacb; color:#264d32; border:1px solid #6b8c56; }
 QPushButton:disabled { background:#e8ebe2; color:#727c6b; border-color:#e0e5d9; }
+QPushButton#primary:disabled,QPushButton#secondary:disabled { background:#e8ebe2; color:#727c6b; border-color:#e0e5d9; }
 QPushButton:focus,QComboBox:focus,QLineEdit:focus,QSpinBox:focus { border:2px solid #668755; }
 QLineEdit,QSpinBox,QComboBox { background:#fffef9; color:#294534; border:1px solid #c9d3c1;
   border-radius:8px; padding:9px 11px; selection-background-color:#c7ddb4; }

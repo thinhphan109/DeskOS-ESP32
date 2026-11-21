@@ -37,6 +37,11 @@ h2,h3{letter-spacing:-.02em}h3{font-size:20px;line-height:1.3;margin:0 0 14px}.p
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 
 .history-aside .peak{display:flex;flex-direction:column;gap:4px}.history-aside .peak b{font-size:11px;font-weight:500;color:var(--muted)}
+.policy-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.policy-grid label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px}.policy-grid input:not([type=checkbox]),.policy-grid select{width:100%;min-width:0;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);font:inherit}.policy-grid .policy-url{grid-column:1/-1}.policy-grid .policy-defer{flex-direction:row;align-items:center}.policy-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.policy-actions button{padding:10px 13px}.release-notes{white-space:pre-wrap}.server-update progress{width:100%;accent-color:var(--dark);height:9px}.manual-tools{margin-top:16px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.manual-tools>summary{padding:15px 18px;cursor:pointer;font-weight:600}.manual-tools>.ota-panel{border:0;margin-top:0}.setup-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:600px){.policy-grid{grid-template-columns:1fr}.policy-url{grid-column:auto}.policy-actions button{flex:1 1 45%}}
+#view-device{align-items:start}.policy-actions button,#setupPair{background:var(--paper);border:1px solid #c9d5c1;border-radius:8px;color:#315b40;font-weight:600;min-height:40px;padding:10px 13px}.policy-actions button:hover,#setupPair:hover{background:#e7efdc}.policy-actions #pullStart{background:#315b40;border-color:#315b40;color:white}#setupPair{margin-top:10px}.server-update{scroll-margin-top:20px}.server-update progress{appearance:none;border:0;border-radius:4px;background:#e1e8d9;overflow:hidden}.server-update progress::-webkit-progress-bar{background:#e1e8d9}.server-update progress::-webkit-progress-value{background:#6d8c55}.manual-tools{margin-top:0}.policy-defer input{accent-color:#315b40}
+@media(max-width:850px){.server-update{scroll-margin-top:80px}}
+.toast{pointer-events:none}
 
   </style>
 </head>
@@ -127,7 +132,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           <dl class="device-details"><div><dt>Device IP</dt><dd id="deviceIp">—</dd></div><div><dt>Wi-Fi network</dt><dd id="wifiName">—</dd></div><div><dt>Internal heap</dt><dd id="heap">—</dd></div><div><dt>Cat FPS / target</dt><dd id="catFps">—</dd></div><div><dt>PSRAM free</dt><dd id="psramFree">—</dd></div><div><dt>DMA strips</dt><dd id="dmaState">—</dd></div><div><dt>Max cat render</dt><dd id="renderMax">—</dd></div><div><dt>Skipped frames / 5 s</dt><dd id="frameSkipped">—</dd></div></dl>
           <div class="fps-history" aria-label="Measured cat frame rate over the last five minutes"><div class="fps-history-head"><span>FRAME RATE / LAST 5 phút</span><strong id="fpsHistorySummary">WAITING FOR SAMPLES</strong></div><canvas id="fpsHistoryCanvas" aria-label="Measured FPS in coral, target FPS in lilac" role="img"></canvas><div class="fps-history-legend"><span>MEASURED FPS</span><span>TARGET FPS</span></div></div>
         </div>
-        <div><div class="eyebrow" style="margin-bottom:8px">Mã ghép nối</div><div class="pair"><input id="pairKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter firmware API key" aria-label="Pairing key"><button id="pairSave">Lưu mã</button></div></div>
+        <div><div class="eyebrow" style="margin-bottom:8px">Mã ghép nối</div><div class="pair"><input id="pairKey" type="password" autocomplete="off" spellcheck="false" placeholder="Nhập mã của thiết bị" aria-label="Mã ghép nối"><button id="pairSave">Lưu mã</button></div><button id="setupPair" type="button">Lấy mã khi dùng Wi-Fi thiết bị</button><p id="setupResult" role="status">Tìm thiết bị → nhập mã → lưu và kết nối.</p></div>
       </section>
     </div>
 
@@ -244,13 +249,23 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       </section>
     </div>
 
-    <section class="ota-panel" aria-label="Cập nhật firmware qua Wi-Fi">
+    <section class="ota-panel server-update" aria-labelledby="serverUpdateTitle">
+      <div><h3 id="serverUpdateTitle">Cập nhật từ server</h3><p>Thiết bị tự kiểm tra và tải firmware. Chính sách tiếp tục hoạt động khi đóng app hoặc tắt máy tính.</p><p id="pullNotice" role="status">Đọc chính sách từ thiết bị để bắt đầu.</p><p id="pullVersion">Chưa kiểm tra phiên bản mới.</p><p id="pullStatus" role="status"></p><p id="pullNotes" class="release-notes"></p><progress id="pullProgress" max="100" value="0" aria-label="Tiến độ tải firmware"></progress></div>
+      <form id="pullForm"><div class="policy-grid">
+        <label class="policy-url" for="pullUrl">Địa chỉ manifest<input id="pullUrl" type="url" maxlength="511" placeholder="https://…/channels/preview.json" autocomplete="off"></label>
+        <label for="pullMode">Chế độ<select id="pullMode"><option value="notify">Kiểm tra và thông báo</option><option value="auto">Tự cập nhật</option></select></label>
+        <label for="pullChannel">Kênh<select id="pullChannel"><option value="preview">Preview</option><option value="stable">Stable</option></select></label>
+        <label for="pullInterval">Kiểm tra mỗi · giây<input id="pullInterval" type="number" min="60" max="86400" step="60" value="120"></label>
+        <label class="policy-defer"><input id="pullDefer" type="checkbox" checked> Hoãn khi đang tập trung</label>
+      </div><div class="policy-actions"><button id="pullSave" type="submit">Lưu chính sách</button><button id="pullReload" type="button">Đọc lại</button><button id="pullCheck" type="button">Kiểm tra ngay</button><button id="pullStart" type="button">Cập nhật</button></div></form>
+    </section>
+    <section class="ota-panel manual-ota" aria-label="Cập nhật firmware qua Wi-Fi">
       <div><span class="eyebrow">08 — OTA GUARDIAN</span><h3>Cập nhật<br>firmware thiết bị</h3><p>Chọn firmware đã tải về. Sau khi khởi động lại, thiết bị sẽ được kiểm tra trước khi báo hoàn tất.</p><div class="ota-checks"><div><small>Phiên bản hiện tại</small><strong id="otaVersion">CHECKING…</strong></div><div><small>Phân vùng cập nhật</small><strong id="otaSlot">CHECKING…</strong></div><div><small>Trạng thái</small><strong id="otaReady">CHECKING…</strong></div><div><small>Khả năng phục hồi</small><strong id="otaRollback">CHECKING…</strong></div><div><small>Kiểm tra khởi động</small><strong id="otaBootHealth">CHECKING…</strong></div><div><small>Thời gian hoạt động</small><strong id="otaUptime">CHECKING…</strong></div></div></div>
-      <div class="ota-upload"><label for="otaFile">File firmware · .bin</label><input id="otaFile" type="file" accept=".bin,application/octet-stream"><button id="otaStart" disabled>Cập nhật firmware</button><div class="ota-progress"><div id="otaProgress"></div></div><p class="ota-result" id="otaResult" role="status">Device status pending.</p><p class="ota-warning">Local developer OTA only · Pairing key required · Keep USB power connected. Do not expose this HTTP endpoint to the Internet.</p></div>
+      <div class="ota-upload"><label for="otaFile">File firmware · .bin</label><input id="otaFile" type="file" accept=".bin,application/octet-stream"><button id="otaStart" disabled>Cập nhật firmware</button><div class="ota-progress"><div id="otaProgress"></div></div><p class="ota-result" id="otaResult" role="status">Đang chờ trạng thái thiết bị.</p><p class="ota-warning">Cập nhật qua Wi-Fi nội bộ. Giữ nguồn ổn định trong khi gửi và khởi động lại.</p></div>
     </section>
 
     <section class="ota-panel catpack-panel" aria-label="Animated cat sprite packs over local Wi-Fi">
-      <div><span class="eyebrow">09 — MOTION PACK STUDIO</span><h3>Bộ chuyển động<br>của mèo</h3><p>16 cat moods · up to 3 hand-drawn animation frames each. Keep your existing 648 KiB collections, or install a 1,944 KiB Motion Pack. Both stay in PSRAM and use the original internal-RAM DMA strips; interrupted uploads leave the previous bank intact.</p><div class="ota-checks"><div><small>ACTIVE COLLECTION</small><strong id="catPackSource">CHECKING…</strong></div><div><small>BACKUP GENERATION</small><strong id="catPackGen">CHECKING…</strong></div><div><small>PSRAM / FLASH READY</small><strong id="catPackReady">CHECKING…</strong></div><div><small>ANIMATION</small><strong id="catPackMotion">CHECKING…</strong></div></div></div>
+      <div><span class="eyebrow">09 — MOTION PACK STUDIO</span><h3>Bộ chuyển động<br>của mèo</h3><p>16 cat moods · up to 3 hand-drawn animation frames each. Keep your existing 648 KiB collections, or install a 1,944 KiB Motion Pack. Both stay in PSRAM and use the original internal-RAM DMA strips; interrupted uploads leave the previous bank intact.</p><div class="ota-checks"><div><small>Bộ đang dùng</small><strong id="catPackSource">CHECKING…</strong></div><div><small>Bản sao lưu</small><strong id="catPackGen">CHECKING…</strong></div><div><small>Bộ nhớ thiết bị</small><strong id="catPackReady">CHECKING…</strong></div><div><small>Chuyển động</small><strong id="catPackMotion">CHECKING…</strong></div></div></div>
       <div class="ota-upload"><label for="catPackFile">STATIC 648 KiB / MOTION 1,944 KiB · .MEOCAT</label><input id="catPackFile" type="file" accept=".meocat,application/octet-stream"><button id="catPackStart" disabled>✦ INSTALL CAT MOTION PACK</button><div class="ota-progress"><div id="catPackProgress"></div></div><p class="ota-result" id="catPackResult" role="status">Checking your cat collection…</p><p class="ota-warning">Use make_catpack.py --motion-demo for a ready-to-test animated collection, or --motion with your own 48 PNG frames. Reboots once; requires private LAN + pairing key.</p></div>
     </section>
 
@@ -297,7 +312,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       document.querySelector('.focus-studio').append(focusConfig);
       let focusConfigDirty=false;
       focusConfig.addEventListener('input',()=>focusConfigDirty=true);
-      focusConfig.addEventListener('submit',async event=>{event.preventDefault();try{await keyedJson('/api/v1/focus/config',{work_min:Number($('focusWorkMin').value),break_min:Number($('focusBreakMin').value),goal:Number($('focusGoal').value)});focusConfigDirty=false;toast('Focus plan saved. Duration changes reset the current session.');streamSeenAt=0;poll();}catch(error){toast(error.message);}});
+      focusConfig.addEventListener('submit',async event=>{event.preventDefault();try{await keyedJson('/api/v1/focus/config',{work_min:Number($('focusWorkMin').value),break_min:Number($('focusBreakMin').value),goal:Number($('focusGoal').value)});focusConfigDirty=false;toast('Đã lưu thời lượng Focus. Phiên hiện tại được đặt lại.');streamSeenAt=0;poll();}catch(error){toast(error.message);}});
 
       const composer=document.createElement('section');composer.className='scene-composer';
       composer.innerHTML=`<h3>Bố cục widget</h3><p>Kéo widget hoặc nhập vị trí để sắp xếp vùng nội dung TFT. Mèo có vùng riêng; đây là bản xem trước bố cục.</p><div class="composer-body"><canvas id="sceneCanvas" class="composer-canvas" width="324" height="240" tabindex="0" aria-label="Widget layout, 162 by 120 pixels. Select a widget and use arrow keys to move it."></canvas><div class="composer-fields"><label class="wide">Widget<select id="widgetSelect"></select></label><label>Type<select id="widgetKind"></select></label><label>Nhãn · không dấu<input id="widgetLabel" maxlength="31"></label><label>X<input id="widgetX" type="number" min="0" max="161"></label><label>Y<input id="widgetY" type="number" min="0" max="119"></label><label>Rộng<input id="widgetW" type="number" min="32" max="162"></label><label>Cao<input id="widgetH" type="number" min="20" max="120"></label></div></div><div class="composer-actions"><button id="widgetAdd">Thêm widget</button><button id="widgetRemove">Xoá</button><button id="sceneDefault">Mặc định</button><button id="sceneClock">Đồng hồ lớn</button><button id="sceneImport">Nhập JSON</button><button id="sceneExport">Xuất JSON</button><button id="sceneReload">Đọc lại thiết bị</button><button id="sceneApply" class="save-layout">Lưu lên thiết bị</button></div><input id="sceneFile" type="file" accept=".json,application/json" hidden><p id="sceneMessage" class="scene-message" role="status">Local draft · not applied.</p>`;
@@ -320,7 +335,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         return {schema:1,widgets};
       }
       // SCENE_CONTRACT_END
-      let sceneDraft=structuredClone(defaultLayout),sceneIndex=0,sceneDirty=false,sceneBusy=false,sceneSeen='',sceneRetryAt=0,sceneDrag=null;
+      let sceneDraft=structuredClone(defaultLayout),sceneIndex=0,sceneDirty=false,sceneBusy=false,sceneSeen='',sceneRetryAt=0,sceneDrag=null,studioCas=false,sceneBase=null;
       widgetKinds.forEach((name,index)=>{const option=document.createElement('option');option.value=index;option.textContent=name;$('widgetKind').append(option);});
       function drawScene(){
         const g=$('sceneCanvas').getContext('2d');g.clearRect(0,0,324,240);g.fillStyle='#f7f2e9';g.fillRect(0,0,324,240);
@@ -344,10 +359,10 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       $('sceneImport').onclick=()=>$('sceneFile').click();
       $('sceneFile').onchange=async()=>{const file=$('sceneFile').files[0];if(!file)return;try{if(file.size>8192)throw Error('Scene file exceeds 8 KiB.');sceneDraft=validateScene(JSON.parse((await file.text()).replace(/^\uFEFF/,'')));sceneIndex=0;sceneDirty=true;refreshScene();}catch(e){$('sceneMessage').textContent=e.message;}finally{$('sceneFile').value='';}};
       $('sceneExport').onclick=()=>{if(!sceneCheck())return;const url=URL.createObjectURL(new Blob([JSON.stringify(validateScene(sceneDraft),null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='meodesk-scene.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-      async function loadScene(force=false){if(sceneBusy)return;sceneBusy=true;const before=JSON.stringify(sceneDraft);try{const data=validateScene(await keyedJson('/api/v1/scene-layout'));if(sceneDirty&&(!force||before!==JSON.stringify(sceneDraft))){$('sceneMessage').textContent='Device layout changed. Your draft is kept; Đọc lại thiết bị to use it.';return;}sceneDraft=data;sceneIndex=0;sceneDirty=false;refreshScene();}catch(e){sceneRetryAt=Date.now()+5000;sceneSeen='';$('sceneMessage').textContent=e.message;}finally{sceneBusy=false;}}
+      async function loadScene(force=false){if(sceneBusy)return;sceneBusy=true;const before=JSON.stringify(sceneDraft);try{const raw=await keyedJson('/api/v1/scene-layout'),data=validateScene(raw);if(sceneDirty&&(!force||before!==JSON.stringify(sceneDraft))){$('sceneMessage').textContent='Bố cục đã đổi trên thiết bị. Bản nháp được giữ; bấm Đọc lại thiết bị để thay thế.';return;}sceneBase=Number.isInteger(raw.revision)&&typeof raw.state_boot_id==='string'?{expected_revision:raw.revision,expected_boot_id:raw.state_boot_id}:null;sceneDraft=data;sceneIndex=0;sceneDirty=false;refreshScene();}catch(e){sceneRetryAt=Date.now()+5000;sceneSeen='';$('sceneMessage').textContent=e.message;}finally{sceneBusy=false;}}
       $('sceneReload').onclick=()=>loadScene(true);
-      $('sceneApply').onclick=async()=>{if(sceneBusy||!sceneCheck())return;sceneBusy=true;$('sceneApply').disabled=true;const submitted=validateScene(sceneDraft);try{await keyedJson('/api/v1/scene-layout',submitted);if(JSON.stringify(submitted)===JSON.stringify(sceneDraft))sceneDirty=false;await control('page',14);$('sceneMessage').textContent=sceneDirty?'Saved. Newer local edits are still unsaved.':'Layout saved to TFT.';}catch(e){$('sceneMessage').textContent=e.message;}finally{sceneBusy=false;$('sceneApply').disabled=false;}};
-      function syncScene(data){if(!pair.value.trim()||!data.capabilities?.includes('widget_scene_v1')||sceneBusy||Date.now()<sceneRetryAt)return;const revision=String(data.state_boot_id)+':'+data.scene_layout_revision;if(revision!==sceneSeen){sceneSeen=revision;loadScene();}}
+      $('sceneApply').onclick=async()=>{if(sceneBusy||!sceneCheck())return;sceneBusy=true;$('sceneApply').disabled=true;const submitted=validateScene(sceneDraft);try{if(studioCas&&!sceneBase)throw Error('Đọc lại bố cục từ thiết bị trước khi lưu.');const result=await keyedJson('/api/v1/scene-layout',studioCas?{...submitted,...sceneBase}:submitted);sceneBase=Number.isInteger(result.revision)?{expected_revision:result.revision,expected_boot_id:result.state_boot_id}:null;if(JSON.stringify(submitted)===JSON.stringify(sceneDraft))sceneDirty=false;await control('page',14);$('sceneMessage').textContent=sceneDirty?'Đã lưu. Các thay đổi mới trong bản nháp chưa được gửi.':'Đã lưu bố cục trên thiết bị.';}catch(e){$('sceneMessage').textContent=e.message;}finally{sceneBusy=false;$('sceneApply').disabled=false;}};
+      function syncScene(data){studioCas=data.capabilities?.includes('studio_cas_v1')||false;if(!pair.value.trim()||!data.capabilities?.includes('widget_scene_v1')||sceneBusy||Date.now()<sceneRetryAt)return;const revision=String(data.state_boot_id)+':'+data.scene_layout_revision;if(revision!==sceneSeen){sceneSeen=revision;loadScene();}}
       refreshScene();
 
       const rulesPanel=document.createElement('details');rulesPanel.className='rule-editor';
@@ -370,23 +385,23 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         return {schema:1,rules};
       }
       // RULE_CONTRACT_END
-      let rulesDirty=false,rulesBusy=false,rulesSeen='',rulesRetryAt=0;
+      let rulesDirty=false,rulesBusy=false,rulesSeen='',rulesRetryAt=0,rulesBase=null;
       $('rulesDraft').value=JSON.stringify({schema:1,rules:[]},null,2);
       function readRulesDraft(){if(new TextEncoder().encode($('rulesDraft').value).length>8192)throw Error('Rule JSON exceeds 8 KiB.');return validateRules(JSON.parse($('rulesDraft').value));}
       function checkRules(){try{readRulesDraft();$('rulesApply').disabled=false;$('rulesResult').textContent=rulesDirty?'Valid local draft · not saved.':'Rules loaded.';return true;}catch(e){$('rulesApply').disabled=true;$('rulesResult').textContent=e.message;return false;}}
       $('rulesDraft').oninput=()=>{rulesDirty=true;checkRules();};
       $('rulesPreset').onclick=()=>{$('rulesDraft').value=JSON.stringify(rulesPreset,null,2);rulesDirty=true;checkRules();};
       $('rulesEmpty').onclick=()=>{$('rulesDraft').value=JSON.stringify({schema:1,rules:[]},null,2);rulesDirty=true;checkRules();};
-      async function loadRules(force=false){if(rulesBusy)return;rulesBusy=true;const before=$('rulesDraft').value;try{const data=validateRules(await keyedJson('/api/v1/rules'));if(rulesDirty&&(!force||before!==$('rulesDraft').value)){$('rulesResult').textContent='Device rules changed. Your draft is kept; Đọc lại thiết bị to use them.';return;}$('rulesDraft').value=JSON.stringify(data,null,2);rulesDirty=false;checkRules();}catch(e){rulesSeen='';rulesRetryAt=Date.now()+5000;$('rulesResult').textContent=e.message;}finally{rulesBusy=false;}}
+      async function loadRules(force=false){if(rulesBusy)return;rulesBusy=true;const before=$('rulesDraft').value;try{const raw=await keyedJson('/api/v1/rules'),data=validateRules(raw);if(rulesDirty&&(!force||before!==$('rulesDraft').value)){$('rulesResult').textContent='Quy tắc đã đổi trên thiết bị. Bản nháp được giữ; bấm Đọc lại thiết bị để thay thế.';return;}rulesBase=Number.isInteger(raw.revision)&&typeof raw.state_boot_id==='string'?{expected_revision:raw.revision,expected_boot_id:raw.state_boot_id}:null;$('rulesDraft').value=JSON.stringify(data,null,2);rulesDirty=false;checkRules();}catch(e){rulesSeen='';rulesRetryAt=Date.now()+5000;$('rulesResult').textContent=e.message;}finally{rulesBusy=false;}}
       $('rulesReload').onclick=()=>loadRules(true);
-      $('rulesApply').onclick=async()=>{if(rulesBusy||!checkRules())return;rulesBusy=true;$('rulesApply').disabled=true;const data=readRulesDraft(),before=$('rulesDraft').value;try{const result=await keyedJson('/api/v1/rules',data);if(before===$('rulesDraft').value)rulesDirty=false;$('rulesResult').textContent=result.mode==='demo'?'DEMO · rules accepted locally.':rulesDirty?'Saved. Newer local changes are unsaved.':'Rules saved on device.';}catch(e){$('rulesResult').textContent=e.message;}finally{rulesBusy=false;$('rulesApply').disabled=false;}};
+      $('rulesApply').onclick=async()=>{if(rulesBusy||!checkRules())return;rulesBusy=true;$('rulesApply').disabled=true;const data=readRulesDraft(),before=$('rulesDraft').value;try{if(studioCas&&!rulesBase)throw Error('Đọc lại quy tắc từ thiết bị trước khi lưu.');const result=await keyedJson('/api/v1/rules',studioCas?{...data,...rulesBase}:data);rulesBase=Number.isInteger(result.revision)?{expected_revision:result.revision,expected_boot_id:result.state_boot_id}:null;if(before===$('rulesDraft').value)rulesDirty=false;$('rulesResult').textContent=result.mode==='demo'?'DEMO · quy tắc lưu cục bộ.':rulesDirty?'Đã lưu. Các thay đổi mới trong bản nháp chưa được gửi.':'Đã lưu quy tắc trên thiết bị.';}catch(e){$('rulesResult').textContent=e.message;}finally{rulesBusy=false;$('rulesApply').disabled=false;}};
       $('rulesImport').onclick=()=>$('rulesFile').click();
       $('rulesFile').onchange=async()=>{const file=$('rulesFile').files[0];if(!file)return;try{if(file.size>8192)throw Error('Rule file exceeds 8 KiB.');const data=validateRules(JSON.parse((await file.text()).replace(/^\uFEFF/,'')));$('rulesDraft').value=JSON.stringify(data,null,2);rulesDirty=true;checkRules();}catch(e){$('rulesResult').textContent=e.message;}finally{$('rulesFile').value='';}};
       $('rulesExport').onclick=()=>{if(!checkRules())return;const url=URL.createObjectURL(new Blob([JSON.stringify(readRulesDraft(),null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='meodesk-rules.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
       function syncRules(data){if(!pair.value.trim()||!data.capabilities?.includes('automation_rules_v1')||rulesBusy||Date.now()<rulesRetryAt)return;const rev=String(data.state_boot_id)+':'+data.rules_revision;if(rev!==rulesSeen){rulesSeen=rev;loadRules();}}
-      async function keyedJson(path,payload){const key=pair.value.trim();if(!key)throw Error('Nhập mã ghép nối trong mục Thiết bị.');const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),3000);try{const response=await fetch(path,{method:payload?'POST':'GET',headers:{'X-MEO-KEY':key,...(payload?{'Content-Type':'application/json'}:{})},body:payload?JSON.stringify(payload):undefined,cache:'no-store',signal:controller.signal});const result=await response.json();if(!response.ok||result.ok===false)throw Error(result.error||'Device request failed');return result;}finally{clearTimeout(timeout);}}
-      $('configExport').addEventListener('click',async()=>{try{const data=await keyedJson('/api/v1/config');const link=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));link.href=url;link.download='meodesk-profile.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('configResult').textContent='Configuration exported. No network credentials included.';}catch(error){$('configResult').textContent=error.message;}});
-      $('configRestore').addEventListener('click',async()=>{try{const file=$('configFile').files[0];if(!file||file.size>8192)throw Error('Choose a configuration JSON file up to 8 KiB.');const data=JSON.parse(await file.text());if(data.schema!==1||data.board!=='meodesk-esp32s3-n16r8'||!data.profile)throw Error('Incompatible configuration file.');await keyedJson('/api/v1/config',data);$('configResult').textContent='Configuration restored and saved on ESP32.';focusConfigDirty=false;streamSeenAt=0;poll();}catch(error){$('configResult').textContent=error.message;}});
+      async function keyedJson(path,payload){const key=pair.value.trim();if(!key)throw Error('Nhập mã ghép nối trong mục Thiết bị.');const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),3000);try{const response=await fetch(path,{method:payload?'POST':'GET',headers:{'X-MEO-KEY':key,...(payload?{'Content-Type':'application/json'}:{})},body:payload?JSON.stringify(payload):undefined,cache:'no-store',signal:controller.signal});const result=await response.json();if(!response.ok||result.ok===false)throw Error(['scene_conflict','rules_conflict'].includes(result.error)?'Nội dung đã đổi ở giao diện khác hoặc thiết bị vừa khởi động lại. Bản nháp được giữ; đọc lại trước khi lưu.':result.error||'Thiết bị chưa nhận thay đổi.');return result;}finally{clearTimeout(timeout);}}
+      $('configExport').addEventListener('click',async()=>{try{const data=await keyedJson('/api/v1/config');const link=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));link.href=url;link.download='meodesk-profile.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('configResult').textContent='Đã xuất cấu hình, không kèm thông tin Wi-Fi hoặc mã ghép nối.';}catch(error){$('configResult').textContent=error.message;}});
+      $('configRestore').addEventListener('click',async()=>{try{const file=$('configFile').files[0];if(!file||file.size>8192)throw Error('Choose a configuration JSON file up to 8 KiB.');const data=JSON.parse(await file.text());if(data.schema!==1||data.board!=='meodesk-esp32s3-n16r8'||!data.profile)throw Error('Incompatible configuration file.');await keyedJson('/api/v1/config',data);$('configResult').textContent='Đã khôi phục và lưu cấu hình trên thiết bị.';focusConfigDirty=false;streamSeenAt=0;poll();}catch(error){$('configResult').textContent=error.message;}});
       $('otaHistoryRefresh').addEventListener('click',async()=>{const root=$('otaHistoryList');root.replaceChildren();try{const data=await keyedJson('/api/v1/ota/history');for(const update of (Array.isArray(data.updates)?data.updates:[]).slice().reverse()){const row=document.createElement('li');row.textContent=[update.phase,update.version_before,update.version_after,update.target_slot].filter(Boolean).join(' · ');root.append(row);}if(!root.children.length){const row=document.createElement('li');row.textContent='Chưa có lịch sử cập nhật.';root.append(row);}}catch(error){const row=document.createElement('li');row.textContent=error.message;root.append(row);}});
       function chooseWorkspace(name){
         if(!workspaceGroups[name])name='overview';
@@ -394,6 +409,8 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         document.querySelectorAll('[data-workspace]').forEach(button=>{const active=button.dataset.workspace===name;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;});
         Object.keys(workspaceGroups).forEach(key=>$('view-'+key).hidden=key!==name);
         try{sessionStorage.setItem('meodesk-workspace',name);}catch(_){}
+        window.scrollTo(0,0);
+        const selected=document.querySelector('[data-workspace="'+name+'"]');if(selected&&innerWidth<=850)selected.scrollIntoView({block:'nearest',inline:'nearest'});
         requestAnimationFrame(()=>{drawHistory();drawFpsHistory();});
       }
       document.querySelectorAll('[data-workspace]').forEach(button=>{
@@ -401,8 +418,124 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         button.addEventListener('keydown',event=>{const tabs=Array.from(document.querySelectorAll('[data-workspace]')),index=tabs.indexOf(button);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();chooseWorkspace(tabs[next].dataset.workspace);tabs[next].focus();}});
       });
       let stateSocket=null,streamSeenAt=0,stateBoot='',stateRevision=-1,pollInFlight=false;
+      // BEGIN MIMI UPDATE SCRIPT
+      // Device-owned server OTA. Auth stays in the existing pairing field/session.
+      const pull = {revision:0,dirty:false,pending:false,supported:false,loaded:false,state:{},demo:false};
+      const pullMessages = {
+        idle:'Chưa có lượt cập nhật đang chạy.',checking:'Đang kiểm tra bản mới…',up_to_date:'Đang dùng bản mới nhất trong kênh đã chọn.',
+        release_available:'Có phiên bản mới sẵn sàng.',waiting_for_focus:'Chờ kết thúc phiên tập trung.',waiting_for_device:'Chờ thiết bị sẵn sàng.',
+        reboot_notice:'Sắp bắt đầu cập nhật.',downloading:'Thiết bị đang tải firmware…',verified_rebooting:'Đã xác minh. Đang khởi động lại…',
+        update_confirmed:'Đã xác nhận firmware mới hoạt động.',returned_previous_firmware:'Thiết bị đang dùng bản trước; đã tạm ngừng tự thử bản vừa cài.',
+        policy_conflict:'Chính sách vừa thay đổi ở giao diện khác. Đọc lại trước khi lưu.',release_changed:'Bản mới đã thay đổi. Kiểm tra lại trước khi cập nhật.',
+        server_not_configured:'Nhập địa chỉ manifest rồi lưu để kiểm tra.',update_busy:'Thiết bị đang xử lý lượt cập nhật khác.',
+        invalid_policy:'Kiểm tra địa chỉ manifest, kênh và chu kỳ.',incompatible_manifest:'Manifest không phù hợp với thiết bị hoặc kênh.',
+        incompatible_release:'Bản phát hành không phù hợp; kiểm tra phiên bản cầu nối và dung lượng.',release_mutated:'Nội dung release đã đổi. Cần mã release mới.',
+        stale_manifest:'Server đang trả manifest cũ. Thiết bị sẽ không hạ phiên bản.',http_connect_failed:'Chưa kết nối được server. Kiểm tra Wi-Fi, địa chỉ và giờ thiết bị.',
+        http_status_failed:'Server chưa cung cấp file cần tải.',content_size_mismatch:'Dung lượng khác manifest. Thiết bị đã giữ firmware hiện tại.',
+        image_verification_failed:'Firmware không qua xác minh. Thiết bị đã giữ bản hiện tại.',download_interrupted:'Tải bị gián đoạn; sẽ thử lại theo lịch.'
+      };
+      const pullFields=['pullUrl','pullMode','pullChannel','pullInterval','pullDefer'];
+      function pullControls(){
+        const allowed=pull.supported&&!pull.pending;
+        pullFields.forEach(id=>$(id).disabled=!allowed);
+        $('pullReload').disabled=pull.pending;
+        $('pullSave').disabled=!allowed||!pull.dirty;
+        $('pullCheck').disabled=!allowed||pull.dirty;
+        $('pullStart').disabled=!allowed||pull.dirty||!pull.state.release_id||!['available','error'].includes(pull.state.phase);
+      }
+      function pullRender(state){
+        pull.state={...state};
+        const phase=state.phase||'idle',active=state.manual_request||['downloading','rebooting'].includes(phase);
+        const target=(active?state.active_version:state.available_version)||'chưa có bản mới';
+        $('pullVersion').textContent=(state.current_version||'—')+' → '+target;
+        if(active&&state.available_version&&state.available_version!==target)$('pullVersion').textContent+=' · Đang chờ thêm bản '+state.available_version;
+        let message=pullMessages[state.code]||'Đang chờ trạng thái cập nhật từ thiết bị.';
+        if(pull.demo)message='DEMO · '+message;
+        if(phase==='countdown')message+=' Bắt đầu sau '+(state.countdown_s||0)+' giây.';
+        if(state.quarantined)message+=' Đã ngừng thử tự động; có thể chủ động thử lại.';
+        $('pullStatus').textContent=message;$('pullNotes').textContent=state.notes||'';
+        $('pullProgress').hidden=!['checking','downloading','rebooting'].includes(phase);
+        if(['checking','rebooting'].includes(phase))$('pullProgress').removeAttribute('value');
+        else $('pullProgress').value=state.expected?Math.round(100*Math.min(state.written||0,state.expected)/state.expected):0;
+        pullControls();
+      }
+      function pullReceive(data){
+        if(data.demo||data.device==='MEO DESK / MOCK')pull.demo=true;
+        if(data.update_state)pullRender(data.update_state);
+        const policy=data.update_policy;
+        if(!policy)return;
+        const capable=(data.capabilities||[]).includes('ota_pull_v1')||pull.supported;
+        if(!capable){$('pullNotice').textContent='Thiết bị cần firmware cầu nối cho OTA server. Dùng cập nhật bằng file bên dưới.';pull.supported=false;pullControls();return;}
+        if(policy.revision!==pull.revision){
+          if(pull.dirty)$('pullNotice').textContent='Chính sách đã đổi ở giao diện khác. Bản nháp được giữ; đọc lại trước khi lưu.';
+          else if(!pull.pending&&pair.value.trim())pullRequest('load',{},false);
+        }
+      }
+      function pullCommand(){return 'mimi-'+Date.now().toString(16)+'-'+Math.random().toString(16).slice(2);}
+      async function pullRequest(operation,payload={},force=true){
+        if(pull.pending)return;
+        const key=pair.value.trim();if(!key){$('pullNotice').textContent='Nhập và lưu mã ghép nối để quản lý cập nhật.';return;}
+        const paths={load:'/api/v1/update-policy',configure:'/api/v1/update-policy',check:'/api/v1/update/check',start:'/api/v1/update/start'};
+        if(!paths[operation])return;
+        if(['check','start'].includes(operation))payload={...payload,command_id:pullCommand()};
+        pull.pending=true;pullControls();$('pullNotice').textContent='Đang trao đổi với thiết bị…';
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);
+        try{
+          const response=await fetch(paths[operation],{method:operation==='load'?'GET':'POST',cache:'no-store',signal:controller.signal,
+            headers:{'Content-Type':'application/json','X-MEO-KEY':key},...(operation==='load'?{}:{body:JSON.stringify(payload)})});
+          if(response.status===404){pull.supported=false;$('pullNotice').textContent='Thiết bị cần firmware cầu nối hỗ trợ OTA server. Dùng cập nhật bằng file bên dưới.';const details=document.querySelector('.manual-tools');if(details)details.open=true;return;}
+          const data=await response.json();
+          if(!response.ok)throw Error(pullMessages[data.error]||(response.status===401?'Kiểm tra lại mã ghép nối.':'Thiết bị chưa nhận thay đổi. Kiểm tra kết nối rồi thử lại.'));
+          if(data.schema!==1||!data.policy||!data.update)throw Error('Phản hồi cập nhật chưa hợp lệ.');
+          pull.supported=true;pull.loaded=true;pull.demo=pull.demo||data.demo===true;
+          if(force||!pull.dirty){
+            const p=data.policy;$('pullUrl').value=p.manifest_url||'';$('pullMode').value=p.mode;$('pullChannel').value=p.channel;
+            $('pullInterval').value=p.interval_s;$('pullDefer').checked=p.defer_focus;pull.revision=p.revision;pull.dirty=false;
+          }
+          pullRender(data.update);$('pullNotice').textContent=pull.demo?'DEMO · chính sách và tiến độ mô phỏng.':operation==='configure'?'Đã lưu chính sách trên thiết bị.':'Chính sách lấy từ thiết bị.';
+        }catch(error){$('pullNotice').textContent=error.name==='AbortError'?'Thiết bị chưa phản hồi. Đọc lại để kiểm tra kết quả trước khi thử tiếp.':error.message;}
+        finally{clearTimeout(timer);pull.pending=false;pullControls();}
+      }
+      $('pullForm').addEventListener('submit',event=>{
+        event.preventDefault();const seconds=Number($('pullInterval').value),url=$('pullUrl').value.trim();
+        if(!Number.isInteger(seconds)||seconds<60||seconds>86400){$('pullNotice').textContent='Chu kỳ kiểm tra từ 60 đến 86.400 giây.';return;}
+        pullRequest('configure',{expected_revision:pull.revision,manifest_url:url,mode:$('pullMode').value,channel:$('pullChannel').value,
+          interval_s:seconds,defer_focus:$('pullDefer').checked});
+      });
+      pullFields.forEach(id=>$(id).addEventListener('input',()=>{pull.dirty=true;pullControls();}));
+      $('pullReload').addEventListener('click',()=>pullRequest('load'));
+      $('pullCheck').addEventListener('click',()=>pullRequest('check'));
+      $('pullStart').addEventListener('click',()=>pullRequest('start',{release_id:pull.state.release_id,expected_revision:pull.revision}));
+      pullControls();
+      let otaExpected=null,otaResuming=false;
+      try{const saved=JSON.parse(localStorage.getItem('mimi-ota-job')||'null');if(saved&&['app0','app1'].includes(saved.target_slot))otaExpected=saved;}catch(_){}
+      function saveOtaExpectation(targetSlot,phase){
+        otaExpected={schema:1,target_slot:targetSlot,device_id:otaDevice?.device_id||'',previous_boot_id:otaDevice?.state_boot_id||'',phase};
+        try{localStorage.setItem('mimi-ota-job',JSON.stringify(otaExpected));}catch(_){}
+      }
+      function finishOtaExpectation(){otaExpected=null;try{localStorage.removeItem('mimi-ota-job');}catch(_){} }
+      async function resumeWebOta(){
+        if(!otaExpected||otaResuming||otaUploading)return;
+        otaResuming=true;$('otaResult').textContent='Đang kiểm tra lượt cập nhật trước; không gửi lại firmware.';
+        try{await verifyOtaBoot(otaExpected.target_slot,otaExpected);finishOtaExpectation();$('otaResult').textContent='Đã xác nhận firmware mới hoạt động.';}
+        catch(error){$('otaResult').textContent='Chưa xác nhận được lượt trước. Kiểm tra nguồn, kết nối và địa chỉ thiết bị.';$('otaResult').title=error.message;}
+        finally{otaResuming=false;}
+      }
+      const resumeButton=document.createElement('button');resumeButton.type='button';resumeButton.textContent='Kiểm tra lượt cập nhật trước';resumeButton.addEventListener('click',resumeWebOta);$('otaResult').after(resumeButton);
+      if(otaExpected)setTimeout(resumeWebOta,1500);
+      $('setupPair').addEventListener('click',async()=>{
+        $('setupResult').textContent='Đang lấy mã. Máy tính cần kết nối Wi-Fi thiết lập của thiết bị.';
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);
+        try{const response=await fetch('/api/v1/pairing',{signal:controller.signal,cache:'no-store'});const data=await response.json();
+          if(!response.ok||typeof data.pairing_key!=='string'||!data.pairing_key)throw Error('setup not available');
+          pair.value=data.pairing_key;$('setupResult').textContent='Đã lấy mã từ thiết bị. Bấm Lưu mã để hoàn tất.';
+        }catch(_){$('setupResult').textContent='Chưa lấy được mã. Kết nối Wi-Fi thiết lập của thiết bị hoặc nhập mã đang có.';}
+        finally{clearTimeout(timer);}
+      });
+      // END MIMI UPDATE SCRIPT
       function receiveState(data){
         if(data.device!=='MEO DESK'&&data.device!=='MEO DESK / MOCK')return;
+        if(typeof pullReceive==='function')pullReceive(data);
         if(typeof data.state_boot_id==='string'&&Number.isInteger(data.state_revision)){
           if(data.state_boot_id===stateBoot&&data.state_revision<stateRevision)return;
           stateBoot=data.state_boot_id;stateRevision=data.state_revision;
@@ -414,7 +547,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         if(stateSocket||!window.WebSocket)return;
         const socket=new WebSocket('ws://'+location.hostname+':'+port+'/');stateSocket=socket;
         socket.onopen=()=>socket.send(JSON.stringify({type:'subscribe',key:pair.value.trim()}));
-        socket.onmessage=event=>{try{const data=JSON.parse(event.data);if(data.type!=='state'||!['MEO DESK','MEO DESK / MOCK'].includes(data.device))return;streamSeenAt=performance.now();$('syncMode').textContent='Đồng bộ trực tiếp';$('syncMode').dataset.live='true';receiveState(data);}catch(_){} };
+        socket.onmessage=event=>{try{const data=JSON.parse(event.data);if(data.type==='update'&&data.state_boot_id===stateBoot){if(typeof pullReceive==='function')pullReceive(data);return;}if(data.type!=='state'||!['MEO DESK','MEO DESK / MOCK'].includes(data.device))return;streamSeenAt=performance.now();$('syncMode').textContent='Đồng bộ trực tiếp';$('syncMode').dataset.live='true';receiveState(data);}catch(_){} };
         socket.onerror=()=>socket.close();
         socket.onclose=()=>{if(stateSocket!==socket)return;stateSocket=null;streamSeenAt=0;$('syncMode').textContent='Đang kết nối lại…';$('syncMode').dataset.live='false';setTimeout(()=>connectState(port),2000);};
       }
@@ -484,12 +617,12 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           if(Date.now()>otaResultPinnedUntil){
             if(!otaDevice.ready)$('otaResult').textContent='OTA not available: verify partition table and flash size.';
             else if(otaDevice.phase==='error')$('otaResult').textContent=otaDevice.message||'Update failed';
-            else if(otaDevice.phase==='idle')$('otaResult').textContent='Ready to verify a local N16R8 firmware image.';
+            else if(otaDevice.phase==='idle')$('otaResult').textContent='Sẵn sàng kiểm tra file firmware của thiết bị.';
           }
           updateOtaButton();
         }catch(e){otaDevice=null;$('otaReady').textContent='OFFLINE';updateOtaButton();}
       }
-      async function verifyOtaBoot(targetSlot){
+      async function verifyOtaBoot(targetSlot,expected={}){
         let sawNewSlot=false;
         const deadline=Date.now()+85000;
         while(Date.now()<deadline){
@@ -502,10 +635,12 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           }catch(e){}finally{clearTimeout(timer);}
           if(!data){$('otaResult').textContent='Waiting for ESP32 to reconnect…';continue;}
           if(data.board!=='meodesk-esp32s3-n16r8')throw Error('Connected device board changed');
+          if(expected.device_id&&data.device_id!==expected.device_id){$('otaResult').textContent='Đang chờ đúng thiết bị đã cập nhật…';continue;}
+          if(expected.previous_boot_id&&(!data.state_boot_id||data.state_boot_id===expected.previous_boot_id)){$('otaResult').textContent='Đang chờ lượt khởi động mới…';continue;}
           if(data.running_slot===targetSlot){
             sawNewSlot=true;
             if(data.boot_health==='failed')throw Error('New firmware failed device startup health check');
-            if(data.boot_health==='passed'&&data.ready){otaDevice=data;return data;}
+            if(data.boot_health==='passed'&&data.ready){if(expected.version&&data.version!==expected.version)throw Error('Firmware version mismatch');otaDevice=data;return data;}
             $('otaResult').textContent='New slot active. Waiting for startup self-check (~25 s)…';
           }else if(sawNewSlot){throw Error('Device returned to previous firmware slot');}
           else{$('otaResult').textContent='Waiting for ESP32 to boot into '+targetSlot+'…';}
@@ -515,16 +650,17 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       async function uploadOta(){
         const file=$('otaFile').files[0],key=pair.value.trim();
         if(!file||!otaDevice||!otaDevice.ready)return;
-        if(!key){toast('Enter the device pairing key first');pair.focus();return;}
+        if(!key){toast('Nhập mã ghép nối của thiết bị trước.');pair.focus();return;}
         if(!file.name.toLowerCase().endsWith('.bin')||file.size<4096||file.size>otaDevice.inactive_slot_bytes){toast('Choose a .bin within the inactive slot size');return;}
         if(otaDevice.board!=='meodesk-esp32s3-n16r8'){toast('Board type mismatch: OTA blocked');return;}
         if(!confirm('Update MèoDesk with '+file.name+' ('+(file.size/1048576).toFixed(2)+' MiB)? Keep power connected.'))return;
         const targetSlot=otaDevice.inactive_slot;
         if(targetSlot!=='app0'&&targetSlot!=='app1'){toast('Invalid inactive OTA slot');return;}
+        saveOtaExpectation(targetSlot,'uploading');
         otaUploading=true;updateOtaButton();$('otaProgress').style.width='0%';
         let accepted=false;
         try{
-          $('otaResult').textContent='Calculating SHA-256…';
+          $('otaResult').textContent='Đang kiểm tra file firmware…';
           const data=await file.arrayBuffer();
           const header=new Uint8Array(data);
           if(header[0]!==0xE9||header[12]!==9||header[13]!==0)throw Error('Firmware is not compiled for ESP32-S3');
@@ -546,11 +682,12 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           $('otaProgress').style.width='100%';
           if(!result.verified)throw Error('Upload was not verified');
           accepted=true;
-          $('otaResult').textContent='SHA-256 verified. Waiting for device restart…';
-          await verifyOtaBoot(targetSlot);
-          $('otaResult').textContent='✓ UPDATE CONFIRMED: new firmware running, startup health PASS.';
-          toast('MèoDesk successfully booted the new firmware');
-        }catch(e){$('otaResult').textContent=(accepted?'BOOT NOT CONFIRMED: ':'UPDATE FAILED: ')+e.message;toast(e.message);}
+          saveOtaExpectation(targetSlot,'uploaded');
+          $('otaResult').textContent='Đã xác minh firmware. Đang chờ thiết bị khởi động lại…';
+          await verifyOtaBoot(targetSlot,otaExpected||{});
+          finishOtaExpectation();$('otaResult').textContent='Đã xác nhận firmware mới hoạt động.';
+          toast('Thiết bị đã cập nhật xong');
+        }catch(e){$('otaResult').textContent=accepted?'Chưa xác nhận được khởi động. Kiểm tra lại lượt cập nhật trước khi thử tiếp.':'Chưa cập nhật được firmware. Kiểm tra kết nối, file và mã ghép nối.';$('otaResult').title=e.message;toast($('otaResult').textContent);}
         finally{otaResultPinnedUntil=Date.now()+30000;otaUploading=false;pollOtaStatus();updateOtaButton();}
       }
       let catPackDevice=null,catPackUploading=false,catPackResultPinnedUntil=0;
@@ -595,7 +732,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       async function uploadCatPack(){
         const file=$('catPackFile').files[0],key=pair.value.trim();
         if(!file||!catPackDevice||!catPackDevice.ready)return;
-        if(!key){toast('Enter your device pairing key');return;}
+        if(!key){toast('Nhập mã ghép nối của thiết bị.');return;}
         if(!catPackAllowed(file)){toast('Use a supported 648 / 1,944 KiB .meocat pack (check PSRAM)');return;}
         if(!confirm('Install '+file.name+' ('+(file.size===1990656?'48 motion frames':'16 static frames')+')? Your desk restarts once.'))return;
         catPackUploading=true;updateCatPackButton();$('catPackProgress').style.width='0%';
@@ -621,7 +758,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           $('catPackResult').textContent='Verified. Rebooting to load new sprites into PSRAM…';
           await verifyCatPackBoot(hash);
           $('catPackResult').textContent='✓ MOTION PACK READY: '+(catPackDevice.frames_per_pose||1)+' frames per pose, loaded from PSRAM.';
-          toast('New cat collection installed!');
+          toast('Đã cài bộ chuyển động mới.');
         }catch(e){$('catPackResult').textContent=(accepted?'NOT CONFIRMED: ':'UPLOAD FAILED: ')+e.message;toast(e.message);}
         finally{catPackResultPinnedUntil=Date.now()+30000;catPackUploading=false;pollCatPackStatus();updateCatPackButton();}
       }
@@ -631,10 +768,10 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       function toast(msg){let node=$('toast');node.textContent=msg;node.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),2900);}
       function percent(n){return Number.isFinite(n)?Math.round(n)+'%':'—';}
       function bar(id,n){$(id).style.width=(Number.isFinite(n)?Math.max(0,Math.min(100,n)):0)+'%';}
-      const mood={rescue:['SEARCHING FOR YOU','Your Windows PC has gone quiet. Check the agent and the Wi-Fi connection.'],sleep:['CHILL MODE','All quiet. Low CPU and GPU load; the cat can finally take a little nap.'],healthy:['EVERYTHING IS PAWSOME','Your PC looks healthy. No warning thresholds have been reached.'],stressed:['BUSY BEANS','CPU or GPU load is above your chosen threshold. Take a peek at the workload.'],hot:['FEELING TOASTY','A temperature sensor reached your alert threshold. Check cooling and airflow.'],low_battery:['BATTERY SOS','Battery is running low on an unplugged laptop. A charger would help.'],paused:['DO NOT DISTURB','Focus or quiet mode is active. Critical alerts still take priority.'],power:['FULL OF ENERGY','Your Windows device is connected to external power.'],hotspot:['HOTSPOT HELPER','ESP32 is using its fallback Wi-Fi access point.'],music:['MUSIC TIME','Windows says something is playing. Enjoy your tiny listening buddy.'],demo:['DEMO / Mô phỏng','These numbers are synthetic test data. Start the real agent for actual PC measurements.']};
+      const mood={rescue:['Đang chờ máy tính','Chưa nhận dữ liệu mới. Kiểm tra app và kết nối Wi-Fi.'],sleep:['Một chút nghỉ ngơi','CPU và GPU đang ít việc. Mèo có thể chợp mắt một lát.'],healthy:['Mọi thứ đang ổn','Máy tính chưa chạm các ngưỡng cảnh báo đã đặt.'],stressed:['Máy tính đang bận','CPU hoặc GPU vượt ngưỡng đã chọn. Kiểm tra tác vụ đang chạy.'],hot:['Máy hơi nóng','Cảm biến nhiệt độ đã chạm ngưỡng cảnh báo. Kiểm tra tản nhiệt.'],low_battery:['Sắp hết pin','Laptop đang dùng pin và cần được cắm sạc.'],paused:['Đang tập trung','Focus hoặc chế độ yên tĩnh đang bật. Cảnh báo quan trọng vẫn được ưu tiên.'],power:['Đã cắm nguồn','Máy tính đang dùng nguồn điện ngoài.'],hotspot:['Wi-Fi thiết lập','Thiết bị đang dùng điểm truy cập Wi-Fi dự phòng.'],music:['Đang nghe nhạc','Trình phát trên Windows đang phát nhạc.'],demo:['DEMO / Mô phỏng','Đây là dữ liệu mẫu để xem giao diện. Mở app thật để đọc dữ liệu máy tính.']};
       const previews=['paused','low_battery','rescue','power','sleep','hot','healthy','hotspot'];
       const personaArt={"looking for PC":"rescue",cozy:"healthy",sleepy:"sleep",dancing:"music","deep focus":"paused",busy:"stressed","too warm":"hot","need charge":"low_battery",celebrating:"healthy"};
-      const scenes=[[12,'HOME'],[0,'PC MONITOR'],[1,'CLOCK'],[2,'FOCUS'],[3,'WI-FI'],[4,'DEVICE'],[5,'NOW PLAYING'],[6,'PRINT'],[7,'AUDIO'],[8,'MOTO'],[9,'SLEEP'],[10,'HEALTH'],[11,'TRENDS'],[13,'PC NETWORK'],[14,'MY WIDGETS']];
+      const scenes=[[12,'Home'],[0,'Máy tính'],[1,'Đồng hồ'],[2,'Focus'],[3,'Wi-Fi'],[4,'Thiết bị'],[5,'Âm nhạc'],[6,'Máy in'],[7,'Âm thanh'],[8,'Moto'],[9,'Ngủ'],[10,'Sức khoẻ'],[11,'Xu hướng'],[13,'Mạng PC'],[14,'Widgets']];
       const defaultScenes=[12,0,5,2];
       scenes.forEach(([id,name])=>{for(let i=0;i<4;i++){const option=document.createElement('option');option.value=String(id);option.textContent=name;$('sceneSlot'+i).append(option);}});
       defaultScenes.forEach((id,i)=>{$('sceneSlot'+i).value=String(id);});
@@ -665,7 +802,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         for(const name of ['cpu','gpu','ram']){const available=rangeSeries(name).filter(n=>typeof n==='number'&&Number.isFinite(n));$(name+'Peak').textContent=available.length?Math.max(...available)+'%':'N/A';}
         $('historyMeta').textContent=(data.mode==='demo'?'Mô phỏng / ':data.mode==='offline'?'OFFLINE / ':'Dữ liệu thực / ')+all.length+' mẫu · '+(chartState.range/60)+' phút gần nhất';drawHistory();}
       function moveHistoryHover(event){const rect=$('historyCanvas').getBoundingClientRect(),n=rangeSeries('cpu').length;if(n<2)return;const left=38,width=rect.width-left-15,i=Math.max(0,Math.min(n-1,Math.round((event.clientX-rect.left-left)*((n-1)/Math.max(1,width)))));chartState.hover=i;const values=['cpu','gpu','ram'].map(name=>{const v=rangeSeries(name)[i];return name.toUpperCase()+' '+(typeof v==='number'?v+'%':'N/A');});const tip=$('chartTip');tip.textContent=(n-1-i)+' giây trước · '+values.join(' / ');tip.style.left=Math.max(80,Math.min(rect.width-80,event.clientX-rect.left))+'px';tip.style.top='53px';tip.classList.add('visible');drawHistory();}
-      async function pollHistory(){try{const res=await fetch('/api/history',{cache:'no-store'});if(!res.ok)throw new Error('History offline');renderHistory(await res.json());}catch(e){$('historyMeta').textContent='Chưa tải được lịch sử hoạt động';}}
+      async function pollHistory(){try{const res=await fetch('/api/history',{cache:'no-store'});if(!res.ok)throw new Error('Chưa tải được lịch sử');renderHistory(await res.json());}catch(e){$('historyMeta').textContent='Chưa tải được lịch sử hoạt động';}}
       function renderSettings(settings){if(!settings||settingsDirty)return;for(const id of settingIds){const key=id.replace(/[A-Z]/g,m=>'_'+m.toLowerCase());if(Number.isFinite(settings[key]))$(id).value=settings[key];} $('quietMode').checked=!!settings.quiet;showSettingValues();}
       function showSettingValues(){for(const id of settingIds){$(id+'Out').textContent=$(id).value+(id==='tempLimit'?'°C':'%');}}
       function renderEvents(entries){const root=$('healthEvents');root.replaceChildren();if(!Array.isArray(entries)||entries.length===0){const li=document.createElement('li');li.textContent='Chưa có sự kiện mới.';root.append(li);return;}for(const event of entries.slice(0,5)){const li=document.createElement('li'),span=document.createElement('span'),ago=document.createElement('time'),level=document.createElement('b');const pri=Number(event.priority)||0;li.className='priority-'+pri;level.className='event-label';level.textContent=['INFO','NOTE','WARN','ALERT'][Math.min(3,Math.max(0,pri))];span.textContent=event.message||'Trạng thái thay đổi';ago.textContent=(event.age_s||0)+'s ago';li.append(level,span,ago);root.append(li);}}
@@ -747,7 +884,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         $('moodCopy').textContent=active&&active.message?active.message:(mood[emo]?mood[emo][1]:mood.rescue[1]);
         document.querySelectorAll('[data-preview]').forEach(b=>{b.classList.toggle('active',!!data.preview_active&&previews[Number(b.dataset.preview)]===emo);});
       }
-      async function poll(){if(pollInFlight||streamFresh())return;pollInFlight=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),3000);try{const res=await fetch('/api/status',{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(!streamFresh())receiveState(data);if(!streamFresh()){$('syncMode').textContent='Đồng bộ định kỳ';$('syncMode').dataset.live='false';}}catch(e){if(!streamFresh()){$('liveLed').classList.remove('live');$('liveText').textContent='DEVICE OFFLINE';$('footerStatus').textContent='RECONNECTING';$('syncMode').textContent='Offline · reconnecting';}}finally{clearTimeout(timeout);pollInFlight=false;}}
+      async function poll(){if(pollInFlight||streamFresh())return;pollInFlight=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),3000);try{const res=await fetch('/api/status',{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();if(!streamFresh())receiveState(data);if(!streamFresh()){$('syncMode').textContent='Đồng bộ định kỳ';$('syncMode').dataset.live='false';}}catch(e){if(!streamFresh()){$('liveLed').classList.remove('live');$('liveText').textContent='Thiết bị mất kết nối';$('footerStatus').textContent='RECONNECTING';$('syncMode').textContent='Offline · reconnecting';}}finally{clearTimeout(timeout);pollInFlight=false;}}
       let fpsHistory=null;
       function drawFpsHistory(){
         const canvas=$('fpsHistoryCanvas');const rect=canvas.getBoundingClientRect();
@@ -775,9 +912,9 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           fpsHistory=data;const n=Math.min(data.fps.length,data.target.length);
           $('fpsHistorySummary').textContent=n?Number(data.fps[n-1]).toFixed(1)+' / '+data.target[n-1]+' FPS':'COLLECTING…';
           drawFpsHistory();
-        }catch(e){$('fpsHistorySummary').textContent='HISTORY OFFLINE';drawFpsHistory();}
+        }catch(e){$('fpsHistorySummary').textContent='Chưa tải được lịch sử';drawFpsHistory();}
       }
-      async function control(action,value=0){const key=pair.value.trim();if(!key){toast('Enter the pairing key to control your screen');pair.focus();return;}try{const res=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json','X-MEO-KEY':key},body:JSON.stringify({action,value})});const body=await res.json();if(!res.ok||!body.ok)throw new Error(body.error||'Request failed');toast(action==='preview'?'Cat preview active for eight seconds':action==='page'?'Scene updated':'Screen command sent');poll();}catch(e){toast('Could not control screen: '+e.message);}}
+      async function control(action,value=0){const key=pair.value.trim();if(!key){toast('Nhập mã ghép nối để điều khiển thiết bị.');pair.focus();return;}try{const res=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json','X-MEO-KEY':key},body:JSON.stringify({action,value})});const body=await res.json();if(!res.ok||!body.ok)throw new Error(body.error||'Request failed');toast(action==='preview'?'Đang xem trước mèo trong tám giây':action==='page'?'Đã chuyển cảnh':'Đã áp dụng thay đổi');poll();}catch(e){toast('Chưa gửi được thao tác: '+e.message);}}
       async function mediaControl(action){
         const key=pair.value.trim();if(!key){toast('Nhập mã ghép nối ở mục Thiết bị để điều khiển nhạc.');return;}
         try{
@@ -791,7 +928,7 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
             if(status.command_seq!==result.seq)break;
             if(status.command_acknowledged){const message=status.command_ok?'WINDOWS ACK / SUCCESS':'WINDOWS DID NOT ACCEPT';$('musicCommand').textContent=message;toast(message);return;}
           }
-          $('musicCommand').textContent='TIMEOUT / TRY AGAIN';toast('Windows agent did not acknowledge the command');
+          $('musicCommand').textContent='Chưa nhận phản hồi · Thử lại';toast('Windows agent did not acknowledge the command');
         }catch(error){$('musicCommand').textContent='UNAVAILABLE';toast(error.message);}
       }
       async function focusControl(action){
@@ -861,9 +998,9 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           $('newPassword').value='';toast('Saved. ESP32 reconnecting; fallback AP remains active.');
         }catch(error){toast('Wi-Fi: '+error.message);}
       }
-      async function saveSettings(){const key=pair.value.trim();if(!key){toast('Enter your pairing key first');pair.focus();return;}const body={cpu_limit:Number($('cpuLimit').value),gpu_limit:Number($('gpuLimit').value),temp_limit:Number($('tempLimit').value),battery_limit:Number($('batteryLimit').value),quiet:$('quietMode').checked};try{const res=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json','X-MEO-KEY':key},body:JSON.stringify(body)});const result=await res.json();if(!res.ok||!result.ok)throw new Error(result.error||'Could not save');settingsDirty=false;toast(result.persisted?'Thresholds saved to ESP32 memory':'Thresholds applied (memory persistence unavailable)');poll();}catch(e){toast('Settings not saved: '+e.message);}}
+      async function saveSettings(){const key=pair.value.trim();if(!key){toast('Nhập mã ghép nối trước.');pair.focus();return;}const body={cpu_limit:Number($('cpuLimit').value),gpu_limit:Number($('gpuLimit').value),temp_limit:Number($('tempLimit').value),battery_limit:Number($('batteryLimit').value),quiet:$('quietMode').checked};try{const res=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json','X-MEO-KEY':key},body:JSON.stringify(body)});const result=await res.json();if(!res.ok||!result.ok)throw new Error(result.error||'Could not save');settingsDirty=false;toast(result.persisted?'Thresholds saved to ESP32 memory':'Thresholds applied (memory persistence unavailable)');poll();}catch(e){toast('Settings not saved: '+e.message);}}
       document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>control(b.dataset.action,Number(b.dataset.value)||0)));
-      for(let i=0;i<4;i++){$('sceneSlot'+i).addEventListener('change',()=>{const chosen=Number($('sceneSlot'+i).value);const slots=[0,1,2,3].map(j=>Number($('sceneSlot'+j).value));if(new Set(slots).size!==4){toast('Pick four different scenes');poll();return;}control('scene_'+i,chosen);});}
+      for(let i=0;i<4;i++){$('sceneSlot'+i).addEventListener('change',()=>{const chosen=Number($('sceneSlot'+i).value);const slots=[0,1,2,3].map(j=>Number($('sceneSlot'+j).value));if(new Set(slots).size!==4){toast('Chọn bốn cảnh khác nhau.');poll();return;}control('scene_'+i,chosen);});}
       document.querySelectorAll('[data-media]').forEach(b=>b.addEventListener('click',()=>mediaControl(b.dataset.media)));
       document.querySelectorAll('[data-focus]').forEach(b=>b.addEventListener('click',()=>focusControl(b.dataset.focus)));
       $('wifiSave').addEventListener('click',saveWifi);
@@ -882,8 +1019,10 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       $('historyCanvas').addEventListener('pointermove',moveHistoryHover);
       $('historyCanvas').addEventListener('pointerleave',()=>{chartState.hover=-1;$('chartTip').classList.remove('visible');drawHistory();});
       window.addEventListener('resize',drawHistory);
+      window.addEventListener('resize',()=>{const selected=document.querySelector('[data-workspace][aria-selected="true"]');if(selected&&innerWidth<=850)selected.scrollIntoView({block:'nearest',inline:'nearest'});});
       window.addEventListener('resize',drawFpsHistory);
       const packDetails=document.createElement('details');packDetails.className='advanced-pack';const packSummary=document.createElement('summary');packSummary.textContent='Bộ chuyển động · nâng cao';packDetails.append(packSummary);const packSection=document.querySelector('.catpack-panel');packSection.before(packDetails);packDetails.append(packSection);
+      const manualDetails=document.createElement('details');manualDetails.className='manual-tools';const manualSummary=document.createElement('summary');manualSummary.textContent='Cập nhật bằng file · công cụ nâng cao';manualDetails.append(manualSummary);const manualSection=document.querySelector('.manual-ota');manualSection.before(manualDetails);manualDetails.append(manualSection);
       document.querySelectorAll('.navlink,.act,.theme-buttons button').forEach(node=>{if(!node.querySelector('svg'))node.textContent=node.textContent.replace(/^[^\p{L}\p{N}]+/u,'').replace(/^\d+\s*\/\s*/,'');});
       try{chooseWorkspace(sessionStorage.getItem('meodesk-workspace')||'overview');}catch(_){chooseWorkspace('overview');}
       setInterval(()=>{if(focusAnchor){const age=performance.now()-focusAnchor.at;if(age<3000)paintFocus(focusAnchor,age);}},200);

@@ -14,6 +14,7 @@ import sys
 import math
 import re
 import time
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -42,6 +43,30 @@ def current_web() -> bytes:
         raise ValueError("Embedded web UI not found")
     return match.group(1).encode("utf-8")
 START = time.monotonic()
+MOCK_BOOT="mock-"+str(int(START*1000))
+UPDATE_LOCK=threading.RLock()
+UPDATE_POLICY={"revision":1,"mode":"notify","channel":"preview","manifest_url":"https://updates.example.invalid/channels/preview.json","configured":True,"interval_s":120,"defer_focus":True}
+UPDATE_STATE={"phase":"idle","code":"idle","current_version":VERSION+"-mock","release_id":"", "available_version":"", "notes":"DEMO · Không tải hoặc ghi firmware thật.","written":0,"expected":0}
+UPDATE_COMMANDS={}
+UPDATE_STARTED=0.0
+
+
+def update_snapshot():
+    global UPDATE_STARTED
+    with UPDATE_LOCK:
+        state=UPDATE_STATE
+        if state["phase"]=="available" and UPDATE_POLICY["mode"]=="auto":
+            UPDATE_STARTED=time.monotonic();state.update(phase="countdown",code="reboot_notice")
+        if state["phase"] in ("countdown","waiting","downloading","rebooting"):
+            if UPDATE_POLICY["defer_focus"] and STATE["focus_running"] and state["phase"] in ("waiting","countdown"):
+                state.update(phase="waiting",code="waiting_for_focus");UPDATE_STARTED=time.monotonic()
+            else:
+                elapsed=time.monotonic()-UPDATE_STARTED
+                if elapsed<5:state.update(phase="countdown",code="reboot_notice",countdown_s=max(0,5-int(elapsed)))
+                elif elapsed<15:state.update(phase="downloading",code="downloading",expected=2500000,written=int((elapsed-5)/10*2500000))
+                elif elapsed<18:state.update(phase="rebooting",code="verified_rebooting")
+                else:state.update(phase="confirmed",code="update_confirmed",current_version=state["available_version"],written=2500000)
+        return {"schema":1,"supported":True,"demo":True,"policy":copy.deepcopy(UPDATE_POLICY),"update":copy.deepcopy(state)}
 MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", "hotspot"]
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
 STATE = {"feeds": [None,None,None], "rules": {"schema":1,"rules":[]}, "rules_revision":0, "scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
@@ -125,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         url = urlparse(self.path)
+        if url.path=="/api/v1/update-policy":return self.reply(update_snapshot())
+        if url.path=="/api/v1/pairing":return self.reply({"schema":1,"pairing_key":"demo-pairing-key","device_id":"mock-device"})
         t = time.monotonic() - START
         if url.path == "/":
             return self.respond(current_web(), "text/html; charset=utf-8")
@@ -185,9 +212,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(dict(schema=1,slot=slot,name=feed["name"] if feed else "Data",value=feed["value"] if fresh else None,
                                    unit=feed["unit"] if fresh else None,ttl_s=feed["ttl_s"] if feed else 30,age_ms=age,fresh=fresh,mode="demo"))
         if url.path == "/api/v1/rules":
-            return self.reply(STATE["rules"])
+            return self.reply(dict(STATE["rules"],revision=STATE["rules_revision"],state_boot_id=MOCK_BOOT))
         if url.path == "/api/v1/scene-layout":
-            return self.reply(STATE["scene_layout"])
+            return self.reply(dict(STATE["scene_layout"],revision=STATE["scene_layout_revision"],state_boot_id=MOCK_BOOT))
         if url.path == "/api/v1/focus":
             focus_step()
             return self.reply({"schema": 1, "focus_running": STATE["focus_running"],
@@ -200,7 +227,9 @@ class Handler(BaseHTTPRequestHandler):
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
             return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1", "automation_rules_v1", "integration_feeds_v1"],
+                               "capabilities": ["studio_cas_v1", "ota_pull_v1", "performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1", "automation_rules_v1", "integration_feeds_v1"],
+                               "state_boot_id":MOCK_BOOT,"state_revision":int(t*1000),
+                               "update_policy":update_snapshot()["policy"],"update_state":update_snapshot()["update"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -256,6 +285,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.reply({"ok": False, "error": "not found"}, 404)
 
     def do_POST(self) -> None:
+        global UPDATE_STARTED
         if self.path == "/api/v1/ota/upload":
             return self.reply({"ok": False, "error": "DEMO cannot upload firmware"}, 501)
         if self.path == "/api/v1/catpack/upload":
@@ -266,6 +296,27 @@ class Handler(BaseHTTPRequestHandler):
             length=int(self.headers.get("Content-Length","0"))
             if not 0<length<=4096:return self.reply({"ok":False,"error":"body must be 1..4096 bytes"},413)
             data = json.loads(self.rfile.read(length))
+            if self.path in ("/api/v1/update-policy","/api/v1/update/check","/api/v1/update/start"):
+                with UPDATE_LOCK:
+                    if self.path=="/api/v1/update-policy":
+                        if data.get("expected_revision")!=UPDATE_POLICY["revision"]:return self.reply({"error":"policy_conflict"},409)
+                        candidate={k:data[k] for k in ("mode","channel","manifest_url","interval_s","defer_focus")}
+                        if candidate["mode"] not in ("auto","notify") or candidate["channel"] not in ("preview","stable"):
+                            return self.reply({"error":"invalid_policy"},400)
+                        UPDATE_POLICY.update(candidate);UPDATE_POLICY["revision"]+=1
+                    else:
+                        command=data.get("command_id","")
+                        if not command:return self.reply({"error":"invalid_command_id"},400)
+                        if command in UPDATE_COMMANDS:return self.reply(update_snapshot())
+                        if self.path.endswith("check"):
+                            UPDATE_STATE.update(phase="available",code="release_available",release_id="demo-next-release",available_version="2.99.0-demo")
+                        else:
+                            if data.get("expected_revision")!=UPDATE_POLICY["revision"]:return self.reply({"error":"policy_conflict"},409)
+                            if data.get("release_id")!=UPDATE_STATE["release_id"]:return self.reply({"error":"release_changed"},409)
+                            UPDATE_STARTED=time.monotonic();UPDATE_STATE.update(phase="countdown",code="reboot_notice",active_version=UPDATE_STATE["available_version"],manual_request=True)
+                        UPDATE_COMMANDS[command]=True
+                        if len(UPDATE_COMMANDS)>8:UPDATE_COMMANDS.pop(next(iter(UPDATE_COMMANDS)))
+                    result=update_snapshot();result["ok"]=True;return self.reply(result)
             if self.path == "/api/v1/config":
                 backup = validate_backup(data)
                 clean = backup["profile"]
@@ -285,15 +336,19 @@ class Handler(BaseHTTPRequestHandler):
                 slot=int(feed_match[1]);feed=validate_feed(data);feed["at"]=time.monotonic();STATE["feeds"][slot]=feed
                 return self.reply(dict(ok=True,slot=slot,ttl_s=feed["ttl_s"],mode="demo"))
             if self.path == "/api/v1/rules":
-                STATE["rules"]=validate_rules(data);STATE["rules_revision"]+=1
-                return self.reply({"ok":True,"persisted":False,"mode":"demo"})
+                with UPDATE_LOCK:
+                    if ("expected_revision" in data or "expected_boot_id" in data) and (data.get("expected_revision")!=STATE["rules_revision"] or data.get("expected_boot_id")!=MOCK_BOOT):return self.reply({"error":"rules_conflict"},409)
+                    STATE["rules"]=validate_rules(data);STATE["rules_revision"]+=1
+                    return self.reply({"ok":True,"persisted":False,"mode":"demo","revision":STATE["rules_revision"],"state_boot_id":MOCK_BOOT})
             if self.path == "/api/v1/notifications":
                 notification_payload(data.get("text",""),data.get("hidden",True),data.get("source",""),data.get("ttl_s",8),data.get("priority",1))
                 return self.reply({"ok": True, "suppressed": STATE["settings"]["quiet"], "mode": "demo"})
             if self.path == "/api/v1/scene-layout":
-                STATE["scene_layout"] = validate_layout(data)
-                STATE["scene_layout_revision"] += 1
-                return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+                with UPDATE_LOCK:
+                    if ("expected_revision" in data or "expected_boot_id" in data) and (data.get("expected_revision")!=STATE["scene_layout_revision"] or data.get("expected_boot_id")!=MOCK_BOOT):return self.reply({"error":"scene_conflict"},409)
+                    STATE["scene_layout"] = validate_layout(data)
+                    STATE["scene_layout_revision"] += 1
+                    return self.reply({"ok": True, "persisted": False, "mode": "demo","revision":STATE["scene_layout_revision"],"state_boot_id":MOCK_BOOT})
             if self.path == "/api/v1/focus/config":
                 work, rest, goal = data.get("work_min"), data.get("break_min"), data.get("goal")
                 if any(type(v) is not int for v in (work,rest,goal)) or not 1<=work<=180 or not 1<=rest<=60 or not 1<=goal<=24:

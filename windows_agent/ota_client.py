@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.request import ProxyHandler, Request, build_opener
 
-from discovery import normalize_host
+from discovery import normalize_host, discover
 
 
 BOARD_ID = "meodesk-esp32s3-n16r8"
@@ -135,6 +135,8 @@ def upload_firmware(host: str, pairing_key: str, firmware: str | Path,
             raise OSError(str(result.get("error") or f"ESP32 rejected OTA (HTTP {response.status})"))
         result["target_slot"] = target_slot
         result["expected_version"] = image_info["firmware_version"]
+        result["expected_device_id"] = status.get("device_id", "")
+        result["previous_boot_id"] = status.get("state_boot_id", "")
         return result
     finally:
         connection.close()
@@ -143,7 +145,8 @@ def upload_firmware(host: str, pairing_key: str, firmware: str | Path,
 def wait_for_boot(host: str, target_slot: str, *, timeout_s: float = 85.0,
                   interval_s: float = 2.0,
                   expected_version: str | None = None,
-                  status_callback: Callable[[str], None] | None = None) -> dict:
+                  status_callback: Callable[[str], None] | None = None,
+                  expected_device_id: str = "", previous_boot_id: str = "", stop_event=None) -> dict:
     """Prove the ESP rebooted into the target slot and passed its startup check.
 
     A completed HTTP upload is NOT a successful firmware boot. Device runtime
@@ -156,28 +159,49 @@ def wait_for_boot(host: str, target_slot: str, *, timeout_s: float = 85.0,
     deadline = time.monotonic() + timeout_s
     saw_target = False
     last_notice = ""
+    next_discovery = 0.0
     while time.monotonic() < deadline:
-        time.sleep(max(0.05, interval_s))
+        delay=max(0.05, interval_s)
+        if stop_event is not None:
+            if stop_event.wait(delay):raise InterruptedError("Stopped read-only OTA confirmation")
+        else:
+            time.sleep(delay)
+        unreachable=False
         try:
             status = read_ota_status(target, timeout=3.0)
         except (OSError, TimeoutError, ValueError):
             notice = "Đang chờ ESP32 kết nối trở lại…"
+            unreachable=True
         else:
-            running = status.get("running_slot")
-            health = status.get("boot_health")
-            if running == target_slot:
-                saw_target = True
-                if health == "failed":
-                    raise OSError("ESP32 đã khởi động firmware mới nhưng kiểm tra sức khỏe thất bại")
-                if health == "passed" and status.get("ready") is True:
-                    if expected_version and status.get("version") != expected_version:
-                        raise OSError("ESP32 booted a version different from the selected manifest")
-                    return status
-                notice = "Đã vào phân vùng mới; đang chờ ESP32 tự kiểm tra khởi động…"
-            elif saw_target:
-                raise OSError("Thiết bị quay lại phân vùng cũ sau khi thử firmware mới")
+            if expected_device_id and status.get("device_id")!=expected_device_id:
+                notice="Đang tìm lại đúng thiết bị đã cập nhật…";unreachable=True
+            elif previous_boot_id and status.get("state_boot_id")==previous_boot_id:
+                notice="Đang chờ thiết bị khởi động lại…";unreachable=True
             else:
-                notice = "Đang chờ ESP32 chuyển sang phân vùng firmware mới…"
+                running = status.get("running_slot")
+                health = status.get("boot_health")
+                if running == target_slot:
+                    saw_target = True
+                    if health == "failed":
+                        raise OSError("ESP32 đã khởi động firmware mới nhưng kiểm tra sức khỏe thất bại")
+                    if health == "passed" and status.get("ready") is True:
+                        if expected_version and status.get("version") != expected_version:
+                            raise OSError("ESP32 booted a version different from the selected manifest")
+                        if previous_boot_id and not status.get("state_boot_id"):
+                            notice="Chưa xác nhận được lượt khởi động mới.";unreachable=True
+                        else:
+                            return dict(status, host=target)
+                    else:
+                        notice = "Đã vào phân vùng mới; đang chờ ESP32 tự kiểm tra khởi động…"
+                elif saw_target:
+                    raise OSError("Thiết bị quay lại phân vùng cũ sau khi thử firmware mới")
+                else:
+                    notice = "Đang chờ ESP32 chuyển sang phân vùng firmware mới…"
+        if unreachable and expected_device_id and time.monotonic()>=next_discovery:
+            next_discovery=time.monotonic()+5
+            for candidate in discover(target,lan_scan=False):
+                if candidate.get("device_id")==expected_device_id:
+                    target=normalize_host(candidate["host"]);break
         if status_callback and notice != last_notice:
             status_callback(notice)
             last_notice = notice

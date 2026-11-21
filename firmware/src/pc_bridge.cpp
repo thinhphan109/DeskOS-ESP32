@@ -632,6 +632,7 @@ static void configureFocus() {
 static void exportSceneLayout() {
   if(!authorized()) return;
   JsonDocument doc; encodeLayout(doc.to<JsonObject>(),sceneLayout); doc["board"]=MeoOtaManager::BOARD_ID;
+  doc["revision"]=sceneLayoutRevision;doc["state_boot_id"]=stateBootId;
   replyJson(200,doc);
 }
 static void importSceneLayout() {
@@ -641,15 +642,20 @@ static void importSceneLayout() {
   if(payload.length()>1600 || deserializeJson(input,payload) || !decodeLayout(input.as<JsonObjectConst>(),candidate)) {
     replyError(400,"invalid layout: 1..6 non-overlapping widgets inside 162x120"); return;
   }
+  if((!input["expected_revision"].isNull() || !input["expected_boot_id"].isNull()) &&
+      (!input["expected_revision"].is<uint32_t>() || input["expected_revision"].as<uint32_t>()!=sceneLayoutRevision ||
+       !input["expected_boot_id"].is<const char*>() || input["expected_boot_id"].as<String>()!=stateBootId)) {
+    replyError(409,"scene_conflict");return;
+  }
   if(!persistProfile(deviceProfile,&candidate)) { replyError(507,"layout not persisted; current layout retained"); return; }
   sceneLayout=candidate; ++sceneLayoutRevision;
   if(controlHandler) controlHandler("refresh",0);
-  JsonDocument doc; doc["ok"]=true; doc["persisted"]=true; replyJson(200,doc);
+  JsonDocument doc; doc["ok"]=true; doc["persisted"]=true;doc["revision"]=sceneLayoutRevision;doc["state_boot_id"]=stateBootId;replyJson(200,doc);
 }
 
 static void exportRules() {
   if(!authorized())return;
-  JsonDocument result;encodeRules(result.to<JsonObject>(),deviceRules);replyJson(200,result);
+  JsonDocument result;encodeRules(result.to<JsonObject>(),deviceRules);result["revision"]=rulesRevision;result["state_boot_id"]=stateBootId;replyJson(200,result);
 }
 
 static void sendFeed(uint8_t slot) {
@@ -681,10 +687,15 @@ static void importRules() {
   if(payload.length()>2048||deserializeJson(body,payload)||!decodeRules(body.as<JsonObjectConst>(),candidate)) {
     replyError(400,"invalid rules: at most six bounded conditions/actions");return;
   }
+  if((!body["expected_revision"].isNull() || !body["expected_boot_id"].isNull()) &&
+      (!body["expected_revision"].is<uint32_t>() || body["expected_revision"].as<uint32_t>()!=rulesRevision ||
+       !body["expected_boot_id"].is<const char*>() || body["expected_boot_id"].as<String>()!=stateBootId)) {
+    replyError(409,"rules_conflict");return;
+  }
   captureRuntimeProfile();
   if(!persistProfile(deviceProfile,nullptr,&candidate)){replyError(507,"rules were not persisted");return;}
   deviceRules=candidate;++rulesRevision;
-  JsonDocument result;result["ok"]=true;result["persisted"]=true;replyJson(200,result);
+  JsonDocument result;result["ok"]=true;result["persisted"]=true;result["revision"]=rulesRevision;result["state_boot_id"]=stateBootId;replyJson(200,result);
 }
 
 static bool validPercent(float value) {
@@ -1088,6 +1099,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("device_profile_v1");
   capabilities.add("focus_config_v1");
   capabilities.add("widget_scene_v1");
+  capabilities.add("studio_cas_v1");
   doc["state_ws_port"] = 81;
   if (meoOta.available()) capabilities.add("ota_local_ab_v1");
   if (meoOta.available()) capabilities.add("ota_pull_v1");
@@ -1199,7 +1211,17 @@ static void sendStatus() {
 
 static void publishState() {
   const uint32_t now = millis();
-  if (!stateSocket.connectedClients() || meoOta.busy() || catPack.busy()) return;
+  if (!stateSocket.connectedClients()) return;
+  if (meoOta.busy() || catPack.busy()) {
+    if(static_cast<uint32_t>(now-statePublishedMs)<500U)return;
+    statePublishedMs=now;
+    JsonDocument update;update["type"]="update";update["state_boot_id"]=stateBootId;
+    serverUpdater.writePolicy(update["update_policy"].to<JsonObject>(),false);
+    serverUpdater.writeState(update["update_state"].to<JsonObject>());
+    String payload;serializeJson(update,payload);
+    for(uint8_t client=0;client<4;++client)if(stateAuthorized[client] && stateSocket.clientIsConnected(client))stateSocket.sendTXT(client,payload);
+    return;
+  }
   if ((uint32_t)(now - statePublishedMs) < (stateDirty ? 40UL : 1000UL)) return;
   statePublishedMs = now;
   stateDirty = false;
@@ -1480,6 +1502,8 @@ static void sendOtaStatus() {
   JsonDocument doc;
   doc["schema"] = 1;
   doc["board"] = MeoOtaManager::BOARD_ID;
+  doc["device_id"]=String(static_cast<uint32_t>(ESP.getEfuseMac()&0xffffffffULL),HEX);
+  doc["state_boot_id"]=stateBootId;
   doc["version"] = MEO_VERSION;
   doc["ready"] = meoOta.available();
   doc["phase"] = meoOta.phaseName();
@@ -1678,7 +1702,7 @@ static void updateRequest(uint8_t operation) {
   else if(operation==1)ok=serverUpdater.check(body["command_id"]|"",error,status);
   else if(body["expected_revision"].is<uint32_t>())ok=serverUpdater.start(body["release_id"]|"",
       body["expected_revision"].as<uint32_t>(),body["command_id"]|"",error,status);
-  else error="policy_conflict";
+  else {error="policy_conflict";status=409;}
   if(!ok){replyError(status,error.c_str());return;}
   JsonDocument doc;serverUpdater.describe(doc);doc["ok"]=true;replyJson(200,doc);
 }

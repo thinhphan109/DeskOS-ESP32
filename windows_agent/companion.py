@@ -14,6 +14,7 @@ import webbrowser
 import sqlite3
 import math
 import subprocess
+from urllib.error import HTTPError
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal, QTimer, QUrl, QSignalBlocker, QSize
@@ -49,6 +50,8 @@ from ui_controls import ScrollSafeComboBox, ScrollSafeSpinBox
 from connection_state import RetryBackoff
 from media_monitor import MediaMonitor
 from single_instance import SingleInstance
+from update_panel import UpdatePanel
+import update_client
 
 
 
@@ -109,6 +112,7 @@ class Bus(QObject):
     discovery = Signal(object)
     ota = Signal(object)
     catpack = Signal(object)
+    updates = Signal(object)
 
 
 class MainWindow(QMainWindow):
@@ -116,6 +120,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.preview_mode = preview
         self._closing = False
+        self._stop_updates = threading.Event()
+        self._upload_active = False
+        self._quit_after_update = False
+        self._update_journal = None
+        self._verification_active = False
+        self._agent_before_update = False
+        self._studio_cas = False
+        self._scene_base = None
+        self._rules_base = None
         self.settings = Settings() if preview else read_settings()
         self.key = secret_store.load(self.settings.host) if self.settings.host else ""
         self.worker: CompanionWorker | None = None
@@ -141,6 +154,7 @@ class MainWindow(QMainWindow):
         self.bus.discovery.connect(self.update_discovery)
         self.bus.ota.connect(self.update_ota)
         self.bus.catpack.connect(self.update_catpack)
+        self.bus.updates.connect(self.receive_update_reply)
         self.setWindowTitle("mimi.desk · " + VERSION)
         self.setWindowIcon(cat_icon())
         self.resize(1120, 760)
@@ -253,6 +267,11 @@ class MainWindow(QMainWindow):
             self.set_tab(0)
         if not preview and start_services:
             self.configure_media_monitor()
+            self._update_journal=update_client.UpdateJournal(user_config_path().with_name("update-session.json"))
+            previous=self._update_journal.read()
+            if previous and previous.get("phase") in ("uploading","uploaded","unconfirmed"):
+                self.ota_hint.setText("Có lượt cập nhật trước đang chờ xác nhận. App sẽ kiểm tra lại, không gửi lại firmware.")
+                QTimer.singleShot(500,self.resume_update_confirmation)
         if self.settings.host:
             self.host_edit.setText(self.settings.host)
             self.update_from_worker({"type": "state", "message": "Đang khởi tạo kết nối tự động..."})
@@ -389,6 +408,10 @@ class MainWindow(QMainWindow):
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.key_edit.setPlaceholderText("Nhập mã ghép nối của thiết bị")
         p.addWidget(self.key_edit)
+        self.setup_hint=text("Tìm thiết bị → nhập mã ghép nối → lưu và kết nối.","subtitle",wrap=True)
+        p.addWidget(self.setup_hint)
+        setup_key=button("Lấy mã khi dùng Wi-Fi thiết bị")
+        setup_key.clicked.connect(self.load_setup_key);p.addWidget(setup_key)
         actions = QHBoxLayout()
         apply_btn = button("Lưu và kết nối", True)
         apply_btn.clicked.connect(self.save_device)
@@ -585,10 +608,14 @@ class MainWindow(QMainWindow):
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
         self.heading(box, "06 / LOCAL FIRMWARE UPDATER", "Cập nhật firmware",
-                     "Cập nhật firmware ESP32-S3 N16R8 qua Wi-Fi. Chỉ dùng trên mạng nội bộ của bạn.")
+                     "Chọn cách kiểm tra và cập nhật. Thiết bị giữ chính sách để tiếp tục khi đóng app.")
+        server,server_box=card()
+        self.server_updates=UpdatePanel(preview=self.preview_mode)
+        self.server_updates.requested.connect(self.request_server_update)
+        server_box.addWidget(self.server_updates);box.addWidget(server)
 
-        summary, s = card("mintCard")
-        s.addWidget(text("DEVICE / A-B FIRMWARE UPDATE", "eyebrow"))
+        summary=Disclosure("Cập nhật bằng file · công cụ nâng cao")
+        self.manual_update=summary;s=summary.content
         self.ota_info = text("Chưa kiểm tra thiết bị. Nhập địa chỉ và pairing key ở tab Thiết bị.", "cardTitle", wrap=True)
         s.addWidget(self.ota_info)
         self.ota_history = text("Chưa đọc lịch sử cập nhật.", "subtitle", wrap=True)
@@ -601,8 +628,8 @@ class MainWindow(QMainWindow):
         s.addWidget(self.ota_check)
         box.addWidget(summary)
 
-        update, u = card()
-        u.addWidget(text("CHỌN FIRMWARE ĐÃ BUILD", "eyebrow"))
+        update=QWidget();u=QVBoxLayout(update);u.setContentsMargins(0,8,0,0)
+        u.addWidget(text("Chọn file firmware", "cardTitle"))
         line = QHBoxLayout()
         self.ota_path = QLineEdit()
         self.ota_path.setPlaceholderText("firmware.bin từ PlatformIO / .pio/build/…")
@@ -620,7 +647,9 @@ class MainWindow(QMainWindow):
         self.ota_start = button("Cập nhật firmware", True)
         self.ota_start.clicked.connect(self.start_ota_update)
         u.addWidget(self.ota_start)
-        box.addWidget(update)
+        s.addWidget(update)
+        resume=button("Kiểm tra lượt cập nhật trước")
+        resume.clicked.connect(self.resume_update_confirmation);s.addWidget(resume)
 
         warning = Disclosure("Thông tin kỹ thuật và phục hồi")
         w = warning.content
@@ -637,6 +666,76 @@ class MainWindow(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(self, "Chọn firmware mimi.desk", "", "ESP32 firmware (*.bin)")
         if filename:
             self.ota_path.setText(filename)
+
+    def request_server_update(self, operation: str, payload: dict) -> None:
+        if self.preview_mode or self._closing:
+            return
+        host,key=self.settings.host,self.key
+        if not host or not key:
+            self.server_updates.reject("Lưu thiết bị và mã ghép nối trước khi quản lý cập nhật.");return
+        def work():
+            try:
+                data=update_client.request(host,key,operation,payload)
+                self.bus.updates.emit({"operation":operation,"host":host,"data":data})
+            except (OSError,ValueError) as error:
+                self.bus.updates.emit({"operation":operation,"host":host,"error":str(error)[:240]})
+        threading.Thread(target=work,name="MimiDeskUpdatePolicy",daemon=True).start()
+
+    def receive_update_reply(self,event: dict) -> None:
+        if self._closing:return
+        if event.get("operation")=="pairing":
+            if event.get("host")!=self.host_edit.text().strip():return
+            if event.get("error"):self.setup_hint.setText(event["error"])
+            else:
+                self.key_edit.setText(event["data"]["pairing_key"])
+                self.setup_hint.setText("Đã lấy mã từ thiết bị. Bấm Lưu và kết nối để hoàn tất.")
+            return
+        if event.get("host")!=self.settings.host:return
+        if event.get("error"):self.server_updates.reject(event["error"])
+        else:
+            self.server_updates.complete(event["data"],event["operation"])
+            if not event["data"].get("supported"):self.manual_update.toggle.setChecked(True)
+
+    def load_setup_key(self) -> None:
+        if self.preview_mode or self._closing:return
+        try:host=discovery.normalize_host(self.host_edit.text().strip() or "192.168.4.1")
+        except ValueError as error:self.setup_hint.setText(str(error));return
+        self.host_edit.setText(host)
+        self.setup_hint.setText("Đang lấy mã. Máy tính cần kết nối Wi-Fi thiết lập của thiết bị.")
+        def work():
+            try:
+                data=json_request(host,"/api/v1/pairing",timeout=3)
+                if not isinstance(data.get("pairing_key"),str) or not data["pairing_key"]:raise ValueError("missing pairing key")
+                self.bus.updates.emit({"operation":"pairing","host":host,"data":data})
+            except (OSError,ValueError):
+                self.bus.updates.emit({"operation":"pairing","host":host,
+                    "error":"Chưa lấy được mã. Kết nối Wi-Fi thiết lập của thiết bị rồi thử lại, hoặc nhập mã hiện có."})
+        threading.Thread(target=work,name="MimiDeskSetup",daemon=True).start()
+
+    def resume_update_confirmation(self) -> None:
+        if self.preview_mode or self._closing or not self._update_journal or self._upload_active or self._verification_active:return
+        job=self._update_journal.read()
+        if not job or job.get("phase")=="confirmed":
+            self.ota_hint.setText("Không có lượt cập nhật chưa xác nhận.");return
+        if job.get("device_id") and self.settings.device_id and job["device_id"]!=self.settings.device_id:
+            self.ota_hint.setText("Lượt cập nhật trước thuộc thiết bị khác. Chọn đúng thiết bị để kiểm tra lại.");return
+        self._verification_active=True
+        self.ota_hint.setText("Đang kiểm tra lượt cập nhật trước; không gửi lại firmware.")
+        threading.Thread(target=lambda:self.verify_update_job(job),name="MimiDeskResumeUpdate",daemon=True).start()
+
+    def verify_update_job(self,job: dict) -> None:
+        try:
+            verified=ota_client.wait_for_boot(job["host"],job["target_slot"],expected_version=job.get("version") or None,
+                expected_device_id=job.get("device_id", ""),previous_boot_id=job.get("previous_boot_id", ""),
+                stop_event=self._stop_updates,
+                status_callback=lambda message:self.bus.ota.emit({"type":"verifying","message":message}))
+            job["phase"]="confirmed";job["host"]=verified.get("host",job["host"])
+            if self._update_journal:self._update_journal.write(job)
+            self.bus.ota.emit({"type":"confirmed","data":verified})
+        except (OSError,ValueError,KeyError) as error:
+            job["phase"]="unconfirmed"
+            if self._update_journal:self._update_journal.write(job)
+            self.bus.ota.emit({"type":"verify_error","message":str(error)[:240]})
 
     def check_ota_status(self) -> None:
         if self.preview_mode:
@@ -685,6 +784,10 @@ class MainWindow(QMainWindow):
         self.ota_check.setEnabled(False)
         self.ota_progress.setValue(0)
         self.ota_hint.setText("Kiểm tra phân vùng và gửi firmware tới ESP32…")
+        self._upload_active=True
+        self._agent_before_update=bool(self.worker and self.worker.running)
+        if self._agent_before_update:self.worker.pause()
+        expected_device_id=self.settings.device_id;previous_boot_id=self.state_cursor.boot or ""
 
         def work():
             last_percent = -1
@@ -696,27 +799,45 @@ class MainWindow(QMainWindow):
                     last_percent = percent
                     self.bus.ota.emit({"type": "progress", "percent": percent})
 
+            job=None
             try:
+                before=ota_client.read_ota_status(host)
+                if expected_device_id and before.get("device_id") and before["device_id"]!=expected_device_id:
+                    raise ValueError("Địa chỉ đang thuộc thiết bị khác. Chưa gửi firmware.")
+                before.setdefault("device_id",expected_device_id);before.setdefault("state_boot_id",previous_boot_id)
+                if self._update_journal:job=self._update_journal.begin(host,before,info)
                 result = ota_client.upload_firmware(host, key, image, progress)
             except Exception as error:
+                if job and self._update_journal:
+                    job["phase"]="unconfirmed";self._update_journal.write(job)
                 self.bus.ota.emit({"type": "upload_error", "message": str(error)[:200]})
                 return
+            if job is None:
+                job={"host":host,"target_slot":result["target_slot"],"version":result.get("expected_version"),
+                     "device_id":expected_device_id,"previous_boot_id":previous_boot_id}
+            job["phase"]="uploaded";job["target_slot"]=result["target_slot"]
+            if self._update_journal:self._update_journal.write(job)
             self.bus.ota.emit({"type": "uploaded", "data": result})
-            try:
-                verified = ota_client.wait_for_boot(
-                    host, result["target_slot"],
-                    expected_version=result.get("expected_version"),
-                    status_callback=lambda message: self.bus.ota.emit({"type": "verifying", "message": message}),
-                )
-            except Exception as error:
-                self.bus.ota.emit({"type": "verify_error", "message": str(error)[:200]})
-                return
-            self.bus.ota.emit({"type": "confirmed", "data": verified})
+            self.verify_update_job(job)
 
         threading.Thread(target=work, name="MeoDeskOtaUpload", daemon=True).start()
 
     def update_ota(self, event: dict) -> None:
+        if self._closing:return
         kind = event.get("type")
+        if kind in ("uploaded","upload_error"):self._upload_active=False
+        if kind=="uploaded":self._verification_active=True
+        if kind in ("confirmed","verify_error","upload_error"):
+            self._verification_active=False
+            data=event.get("data",{})
+            if(kind=="confirmed" and data.get("host") and data["host"]!=self.settings.host and
+                    self.settings.device_id and data.get("device_id")==self.settings.device_id):
+                self.update_from_worker({"type":"device_relocated","host":self.settings.host,
+                                         "device_id":self.settings.device_id,"new_host":data["host"]})
+            if self._agent_before_update and not self._quit_after_update:
+                self._agent_before_update=False;self.start_agent()
+        if self._quit_after_update and not self._upload_active:
+            self.quit_app();return
         if kind == "status":
             data = event["data"]
             availability = "SẴN SÀNG A/B" if data.get("ready") else "CHƯA CÓ HAI SLOT OTA"
@@ -805,6 +926,8 @@ class MainWindow(QMainWindow):
             self.favorite_scenes.append(combo)
             favorites.addWidget(combo, index // 2, index % 2)
         layout.addLayout(favorites)
+        self.studio_feedback=text("Thay đổi được xác nhận bởi thiết bị; bản nháp trong editor được giữ riêng.","subtitle",wrap=True)
+        layout.addWidget(self.studio_feedback)
         box.addWidget(controls)
 
         scene_panel, scene_box = card()
@@ -964,8 +1087,10 @@ class MainWindow(QMainWindow):
         self.scene_request_pending = True
         def task():
             try:
-                data = validate_layout(json_request(host,"/api/v1/scene-layout",key,timeout=2.0))
-                self.bus.status.emit({"type":"scene_layout", "host":host, "data":data, "force":force, "before":before})
+                raw=json_request(host,"/api/v1/scene-layout",key,timeout=2.0)
+                data=validate_layout(raw)
+                base={"expected_revision":raw["revision"],"expected_boot_id":raw["state_boot_id"]} if "revision" in raw and "state_boot_id" in raw else None
+                self.bus.status.emit({"type":"scene_layout", "host":host, "data":data, "force":force, "before":before,"base":base})
             except (OSError, ValueError, TimeoutError) as error:
                 self.bus.status.emit({"type":"scene_error", "host":host, "message":str(error)[:160]})
         threading.Thread(target=task,name="MeoDeskSceneRead",daemon=True).start()
@@ -979,13 +1104,19 @@ class MainWindow(QMainWindow):
         if not self.settings.host or not self.key:
             self.scene_editor.hint.setText("Nhập IP và pairing key ở tab Thiết bị."); return
         host, key = self.settings.host, self.key
+        data=validate_layout(data)
+        if self._studio_cas and not self._scene_base:
+            self.scene_editor.hint.setText("Đọc lại bố cục từ thiết bị trước khi lưu bản nháp.");return
+        payload=dict(data,**(self._scene_base or {})) if self._studio_cas else data
         def task():
             try:
-                result = json_request(host,"/api/v1/scene-layout",key,data,timeout=2.0)
+                result = json_request(host,"/api/v1/scene-layout",key,payload,timeout=2.0)
                 if result.get("ok") is not True: raise ValueError("Thiết bị chưa lưu bố cục.")
-                self.bus.status.emit({"type":"scene_saved", "host":host, "data":data})
+                base={"expected_revision":result["revision"],"expected_boot_id":result["state_boot_id"]} if "revision" in result and "state_boot_id" in result else None
+                self.bus.status.emit({"type":"scene_saved", "host":host, "data":data,"base":base})
             except (OSError, ValueError, TimeoutError) as error:
-                self.bus.status.emit({"type":"scene_error", "host":host, "message":str(error)[:160]})
+                message="Bố cục đã thay đổi ở giao diện khác hoặc thiết bị vừa khởi động lại. Bản nháp được giữ; đọc lại trước khi lưu." if isinstance(error,HTTPError) and error.code==409 else str(error)[:160]
+                self.bus.status.emit({"type":"scene_error", "host":host, "message":message})
         threading.Thread(target=task,name="MeoDeskSceneSave",daemon=True).start()
 
     def request_rules(self,payload=None,force=False) -> None:
@@ -997,14 +1128,19 @@ class MainWindow(QMainWindow):
         if not host or not key:
             self.rule_editor.hint.setText("Nhập IP và pairing key ở tab Thiết bị.");return
         before=self.rule_editor.editor.toPlainText();self.rules_pending=True
+        if payload is not None and self._studio_cas and not self._rules_base:
+            self.rules_pending=False;self.rule_editor.hint.setText("Đọc lại quy tắc từ thiết bị trước khi lưu bản nháp.");return
+        outgoing=dict(payload,**(self._rules_base or {})) if payload is not None and self._studio_cas else payload
         def task():
             try:
-                result=json_request(host,"/api/v1/rules",key,payload,timeout=2.0)
+                result=json_request(host,"/api/v1/rules",key,outgoing,timeout=2.0)
                 if payload is not None and result.get("ok") is not True:raise ValueError("Thiết bị chưa lưu quy tắc.")
                 data=validate_rules(payload if payload is not None else result)
-                self.bus.status.emit(dict(type="rules_result",host=host,data=data,saved=payload is not None,force=force,before=before))
+                base={"expected_revision":result["revision"],"expected_boot_id":result["state_boot_id"]} if "revision" in result and "state_boot_id" in result else None
+                self.bus.status.emit(dict(type="rules_result",host=host,data=data,saved=payload is not None,force=force,before=before,base=base))
             except (OSError,ValueError,TimeoutError) as error:
-                self.bus.status.emit(dict(type="rules_error",host=host,message=str(error)[:160]))
+                message="Quy tắc đã thay đổi ở giao diện khác hoặc thiết bị vừa khởi động lại. Bản nháp được giữ; đọc lại trước khi lưu." if isinstance(error,HTTPError) and error.code==409 else str(error)[:160]
+                self.bus.status.emit(dict(type="rules_error",host=host,message=message))
         threading.Thread(target=task,name="MeoDeskRules",daemon=True).start()
 
     def export_device_config(self) -> None:
@@ -1044,6 +1180,7 @@ class MainWindow(QMainWindow):
                 self._preview_state["scene_slots"][int(action[-1])] = value
             self.update_from_worker({"type": "device_state", "data": self._preview_state})
             self.pack_motion_status.setText("DEMO · thay đổi chỉ áp dụng trong bản xem trước")
+            self.studio_feedback.setText("DEMO · thay đổi chỉ áp dụng trong bản xem trước")
             return
         host = self.host_edit.text().strip() or self.settings.host
         key = self.key_edit.text().strip() or self.key
@@ -1051,6 +1188,7 @@ class MainWindow(QMainWindow):
             self.pack_motion_status.setText("Nhập IP và pairing key trong tab Thiết bị trước.")
             return
         self.pack_motion_status.setText("Đang gửi thay đổi đến ESP32…")
+        self.studio_feedback.setText("Đang áp dụng thay đổi…")
 
         def work() -> None:
             try:
@@ -1060,6 +1198,7 @@ class MainWindow(QMainWindow):
                     raise OSError("ESP32 không chấp nhận thay đổi. Kiểm tra kết nối và firmware.")
                 status = json_request(host, "/api/v1/status", timeout=2.0)
                 self.bus.status.emit({"type": "device_state", "data": status, "source": "http"})
+                self.bus.status.emit({"type":"control_saved","host":host})
             except Exception as error:
                 self.bus.status.emit({"type": "motion_error", "message": str(error)[:180]})
 
@@ -1144,6 +1283,10 @@ class MainWindow(QMainWindow):
         try:
             data = json.loads(message)
         except ValueError:
+            return
+        if isinstance(data,dict) and data.get("type")=="update":
+            if hasattr(self,"server_updates"):
+                self.server_updates.receive_remote(data.get("update_policy",{}),data.get("update_state",{}))
             return
         if not isinstance(data, dict) or data.get("type") != "state":
             return
@@ -1256,6 +1399,9 @@ class MainWindow(QMainWindow):
 
     def update_catpack(self, event: dict) -> None:
         kind = event.get("type")
+        if kind=="control_saved":
+            if event.get("host")==self.settings.host:self.studio_feedback.setText("Đã áp dụng. Giao diện hiển thị trạng thái mới nhất từ thiết bị.")
+            return
         if kind in ("status", "confirmed"):
             data = event["data"]
             source = "MÈO TÙY CHỈNH / PSRAM" if data.get("source") == "custom" else "MÈO GỐC / FLASH"
@@ -1309,6 +1455,8 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
         self.stack.updateGeometry()
         self.content_scroll.verticalScrollBar().setValue(0)
+        if index==5 and not self.preview_mode and self._start_services:
+            self.server_updates.send("load",{})
         self.page_trail.setText("mimi.desk / "+("Tổng quan","Thiết bị","Âm nhạc","Tập trung","Cài đặt","Cập nhật","Studio")[index])
         for i, nav in enumerate(self.nav):
             nav.setProperty("chosen", i == index or (index==5 and i==1))
@@ -1354,13 +1502,16 @@ class MainWindow(QMainWindow):
             if kind=="rules_error":
                 self.rules_revision=None;self.rules_retry_at=time.monotonic()+5;self.rule_editor.hint.setText(event["message"])
             elif event["saved"]:
+                self._rules_base=event.get("base")
                 try:unchanged=self.rule_editor.data()==event["data"]
                 except ValueError:unchanged=False
                 if unchanged:self.rule_editor.dirty=False
                 self.rule_editor.hint.setText("Đã lưu quy tắc." if unchanged else "Đã lưu. Thay đổi mới trong bản nháp chưa được gửi.")
                 self.refresh_device_state()
             else:
-                self.rule_editor.set_data(event["data"],force=event["force"] and self.rule_editor.editor.toPlainText()==event["before"])
+                force=event["force"] and self.rule_editor.editor.toPlainText()==event["before"]
+                if not self.rule_editor.dirty or force:self._rules_base=event.get("base")
+                self.rule_editor.set_data(event["data"],force=force)
             return
         if kind in ("scene_layout", "scene_saved", "scene_error"):
             if event.get("host") != self.settings.host: return
@@ -1370,12 +1521,14 @@ class MainWindow(QMainWindow):
                 self.scene_revision = None
                 self.scene_editor.hint.setText(event["message"])
             elif kind == "scene_saved":
+                self._scene_base=event.get("base")
                 if self.scene_editor.data == event["data"]:
                     self.scene_editor.dirty = False
                     self.scene_editor.hint.setText("Đã lưu bố cục lên thiết bị.")
                 self.send_device_control("page",14)
             else:
                 unchanged = json.dumps(self.scene_editor.data, sort_keys=True) == event["before"]
+                if not self.scene_editor.dirty or (event.get("force",False) and unchanged):self._scene_base=event.get("base")
                 self.scene_editor.set_data(event["data"],force=event.get("force",False) and unchanged)
             return
         if kind == "device_state":
@@ -1398,6 +1551,7 @@ class MainWindow(QMainWindow):
             if self.worker and old_boot is not None and old_boot != self.state_cursor.boot:
                 self.worker.reset_device_session()
             self._stream_supported = "state_websocket_v1" in data.get("capabilities", [])
+            self._studio_cas = "studio_cas_v1" in data.get("capabilities", [])
             self.observe_focus_completion(data)
             rules_revision=(self.settings.host,data.get("state_boot_id"),data.get("rules_revision"))
             if ("automation_rules_v1" in data.get("capabilities",[]) and rules_revision!=self.rules_revision
@@ -1422,6 +1576,12 @@ class MainWindow(QMainWindow):
                 self._stream_seen_at = time.monotonic()
                 self.sync_label.setText("WebSocket · đồng bộ trực tiếp")
             self.device_seen_at=time.monotonic()
+            self.setup_hint.setText("Đã kết nối với thiết bị." if not self._pairing_rejected else "Kiểm tra lại mã ghép nối.")
+            if isinstance(data.get("update_state"),dict):
+                self.server_updates.receive_remote(data.get("update_policy",{}),data["update_state"])
+                writing=data["update_state"].get("phase") in ("downloading","rebooting")
+                self.ota_start.setEnabled(not writing and not self._upload_active)
+                self.pack_start.setEnabled(not writing and not self._upload_active)
             self.refresh_connection_badge()
             self.studio_scene.setCurrentIndex(self.studio_scene.findData(data.get("page")))
             for action, field in (("theme", "theme"), ("fps", "fps_profile")):
@@ -1546,6 +1706,7 @@ class MainWindow(QMainWindow):
                 choice.setChecked(style == index)
         elif kind == "motion_error":
             self.pack_motion_status.setText(event.get("message", "Không điều khiển được chuyển động"))
+            self.studio_feedback.setText(event.get("message","Chưa áp dụng được thay đổi. Kiểm tra kết nối rồi thử lại."))
         else:
             if event.get("host", self.settings.host) != self.settings.host:
                 return
@@ -1708,7 +1869,12 @@ class MainWindow(QMainWindow):
             self.quit_app()
 
     def quit_app(self) -> None:
+        if self._upload_active:
+            self._quit_after_update=True
+            self.ota_hint.setText("Đang gửi firmware. App sẽ thoát sau khi gửi xong; mở lại để kiểm tra kết quả.")
+            self.hide();return
         self._closing = True
+        self._stop_updates.set()
         if hasattr(self,"preview_graph_timer"): self.preview_graph_timer.stop()
         self.state_timer.stop()
         self.display_timer.stop()

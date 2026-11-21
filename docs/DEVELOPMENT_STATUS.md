@@ -20,6 +20,7 @@ Cập nhật ngày 21/11/2026. Phần lõi firmware đã được triển khai �
 | v2.11 | Tên hiển thị mimi.desk, Web/Python cùng hướng ấm áp/gọn, điều hướng theo tác vụ, Chẩn đoán thu gọn và chiều cao theo trang | OTA server mới ở mức đề xuất; chưa tự tải firmware hoặc cập nhật EXE |
 | Windows v2.12 | Một phiên GUI, nhạc cục bộ độc lập với ESP32, tìm phiên media, backoff và tìm lại đúng device ID | Đã đọc Spotify/ảnh bìa thật; còn nghiệm thu đổi IP bo và EXE trên Windows sạch. Firmware vẫn v2.11-dev |
 | Firmware v2.13 | Reader OTA server, chính sách revision, manifest/tương thích, lease OTA/CatPack, NVS cầu nối và publisher | Hai build đã qua; chưa deploy, thử mạng/TLS hoặc rollback trên bo |
+| v2.14 | Bảng update Web/Qt, journal OTA, xác minh device/boot, AP pairing và revision Studio/rules | Kiểm tra phần mềm và render DEMO đã qua; chưa nạp bo |
 
 ## Bằng chứng kiểm thử
 
