@@ -19,6 +19,8 @@ policy controls, interrupted-update confirmation and Studio draft conflict handl
 The [RC handoff](docs/RELEASE_CANDIDATE_V215.md) covers the packaged Windows app,
 private bridge/public firmware artifacts, staging and remaining physical acceptance.
 No firmware was flashed and no automatic update policy was enabled in this pass.
+See [next discussion and updates](docs/NEXT_DISCUSSION_AND_UPDATES.md) for pending
+deployment decisions, acceptance work and proposed follow-up improvements.
 See [the desktop and OTA production plan](docs/PRODUCTION_PLAN.md) for proposed naming,
 product messages, update flow and acceptance gates. The display brand is now **mimi.desk**;
 legacy device/configuration identifiers remain compatible. [Server OTA](docs/SERVER_OTA_PROPOSAL.md) is a proposal, not enabled firmware behavior.

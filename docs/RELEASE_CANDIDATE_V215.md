@@ -51,6 +51,8 @@ Bản cầu nối mới nhất và binary public cùng là 2.15.0-rc.1, nên rea
 
 ## Những việc cần thảo luận/nghiệm thu tiếp
 
+Danh sách chi tiết kèm mức ưu tiên, phương án và mốc dự kiến: [các vấn đề cần thảo luận và update tiếp theo](NEXT_DISCUSSION_AND_UPDATES.md).
+
 - Hosting thật và quyền phát hành, chu kỳ preview/stable, thời điểm bật Auto cho thiết bị dùng hằng ngày.
 - Một lượt OTA có kiểm soát trên bo, xác minh slot/device/boot/health; thử mạng đứt, mất nguồn và đường phục hồi/rollback với bootloader thực tế.
 - TFT Music/font tiếng Việt, đồng hồ Midnight từng giây, FPS/heap khi TLS chạy cùng renderer, Focus và đồng bộ Web/app trên phần cứng.
