@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-KINDS = ("Clock", "CPU", "GPU", "RAM", "Focus", "Music", "Network", "Text")
+KINDS = ("Clock", "CPU", "GPU", "RAM", "Focus", "Music", "Network", "Text", "Data 1", "Data 2", "Data 3")
 DEFAULT_LAYOUT = {"schema": 1, "widgets": [
     {"kind": 0, "x": 0, "y": 0, "w": 162, "h": 40, "label": "Clock"},
     {"kind": 1, "x": 0, "y": 42, "w": 80, "h": 36, "label": "CPU"},
@@ -21,7 +21,7 @@ def validate_layout(data: dict) -> dict:
     for item in widgets:
         if not isinstance(item, dict) or set(item) != {"kind", "x", "y", "w", "h", "label"}:
             raise ValueError("Invalid widget fields")
-        for key, low, high in (("kind", 0, 7), ("x", 0, 161), ("y", 0, 119), ("w", 32, 162), ("h", 20, 120)):
+        for key, low, high in (("kind", 0, 10), ("x", 0, 161), ("y", 0, 119), ("w", 32, 162), ("h", 20, 120)):
             if type(item[key]) is not int or not low <= item[key] <= high:
                 raise ValueError(f"Invalid widget {key}")
         if item["x"] + item["w"] > 162 or item["y"] + item["h"] > 120:

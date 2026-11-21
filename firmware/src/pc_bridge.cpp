@@ -68,6 +68,11 @@ static DeviceProfile deviceProfile;
 static SceneLayout sceneLayout;
 static uint32_t sceneLayoutRevision=0;
 static RuleSet deviceRules;
+static IntegrationFeed integrationFeeds[3];
+const IntegrationFeed &pcBridgeFeed(uint8_t slot) {
+  static const IntegrationFeed unavailable;
+  return slot<3 ? integrationFeeds[slot] : unavailable;
+}
 static uint32_t rulesRevision=0;
 const DeviceProfile &pcBridgeProfile() { return deviceProfile; }
 const SceneLayout &pcBridgeSceneLayout() { return sceneLayout; }
@@ -416,7 +421,7 @@ static bool decodeLayout(JsonObjectConst input, SceneLayout &layout) {
     JsonObjectConst item=input["widgets"][i];
     for(const char *key : {"kind","x","y","w","h"}) if(!item[key].is<int>()) return false;
     const int kind=item["kind"], x=item["x"], y=item["y"], w=item["w"], h=item["h"];
-    if(kind<0||kind>7||x<0||x>161||y<0||y>119||w<32||w>162||h<20||h>120||
+    if(kind<0||kind>10||x<0||x>161||y<0||y>119||w<32||w>162||h<20||h>120||
        !item["label"].is<const char*>()||strlen(item["label"].as<const char*>())>31) return false;
     auto &widget=layout.widgets[i]; widget.kind=static_cast<WidgetKind>(kind);
     widget.bounds={static_cast<int16_t>(x),static_cast<int16_t>(y),static_cast<uint16_t>(w),static_cast<uint16_t>(h)};
@@ -637,6 +642,30 @@ static void importSceneLayout() {
 static void exportRules() {
   if(!authorized())return;
   JsonDocument result;encodeRules(result.to<JsonObject>(),deviceRules);replyJson(200,result);
+}
+
+static void sendFeed(uint8_t slot) {
+  if(!authorized())return;
+  const auto &feed=integrationFeeds[slot];const uint32_t now=millis();const bool fresh=feed.fresh(now);
+  JsonDocument result;result["schema"]=1;result["slot"]=slot;result["name"]=feed.name;result["fresh"]=fresh;
+  if(fresh){result["value"]=feed.value;result["unit"]=feed.unit;}else{result["value"]=nullptr;result["unit"]=nullptr;}
+  result["ttl_s"]=feed.ttlSeconds;
+  if(feed.received)result["age_ms"]=static_cast<uint32_t>(now-feed.updatedMs);else result["age_ms"]=nullptr;
+  replyJson(200,result);
+}
+static void receiveFeed(uint8_t slot) {
+  if(!authorized())return;
+  const String payload=httpServer.arg("plain");JsonDocument body;IntegrationFeed candidate;
+  if(payload.length()>512||deserializeJson(body,payload)||!body["ttl_s"].is<int>()||
+     body["ttl_s"].as<int>()<1||body["ttl_s"].as<int>()>300) { replyError(400,"invalid feed or TTL");return; }
+  for(const char *key:{"name","value","unit"})if(!body[key].is<const char*>()){replyError(400,"feed text fields are required");return;}
+  const char *name=body["name"],*value=body["value"],*unit=body["unit"];
+  if(strlen(name)>16||strlen(value)>20||strlen(unit)>8){replyError(400,"feed text exceeds display limits");return;}
+  snprintf(candidate.name,sizeof(candidate.name),"%s",name);snprintf(candidate.value,sizeof(candidate.value),"%s",value);snprintf(candidate.unit,sizeof(candidate.unit),"%s",unit);
+  candidate.ttlSeconds=body["ttl_s"];
+  if(!candidate.valid()){replyError(400,"feed fields require printable ASCII");return;}
+  candidate.received=true;candidate.updatedMs=millis();integrationFeeds[slot]=candidate;
+  JsonDocument result;result["ok"]=true;result["slot"]=slot;result["ttl_s"]=candidate.ttlSeconds;replyJson(200,result);
 }
 static void importRules() {
   if(!authorized())return;
@@ -1012,6 +1041,8 @@ static void fillStatus(JsonDocument &doc) {
   doc["state_revision"] = stateRevision;
   doc["scene_layout_revision"] = sceneLayoutRevision;
   doc["rules_revision"]=rulesRevision;
+  JsonArray feedFresh=doc["feed_fresh"].to<JsonArray>();
+  for(uint8_t i=0;i<3;++i)feedFresh.add(integrationFeeds[i].fresh(millis()));
   doc["state_boot_id"] = stateBootId;
   doc["device"] = "MEO DESK";
   doc["api_version"] = 1;
@@ -1029,6 +1060,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("focus_completion_cursor_v1");
   capabilities.add("notifications_v1");
   capabilities.add("automation_rules_v1");
+  capabilities.add("integration_feeds_v1");
   capabilities.add("tft_themes");
   capabilities.add("scene_shortcuts_v1");
   capabilities.add("cat_behavior_v1");
@@ -1713,6 +1745,11 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/notifications", HTTP_POST, receiveNotification);
   httpServer.on("/api/v1/rules",HTTP_GET,exportRules);
   httpServer.on("/api/v1/rules",HTTP_POST,importRules);
+  for(uint8_t i=0;i<3;++i) {
+    const String path="/api/v1/feeds/"+String(i);
+    httpServer.on(path,HTTP_GET,[i](){sendFeed(i);});
+    httpServer.on(path,HTTP_POST,[i](){receiveFeed(i);});
+  }
   httpServer.on("/api/v1/focus", HTTP_GET, sendFocus);
   httpServer.on("/api/v1/focus", HTTP_POST, receiveFocus);
   httpServer.on("/api/v1/focus/config", HTTP_POST, configureFocus);

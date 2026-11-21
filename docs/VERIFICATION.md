@@ -161,3 +161,9 @@ validate electrical wiring, hardware DMA, PSRAM or OTA rollback.
 - `release/SHA256SUMS.txt` lists v1.7 firmware, v1.6 motion demo, v1.5 static
   Cat Pack and historical
   known files. Hash checks do not provide publisher authentication.
+
+## 21 November 2026 source pass
+
+The v2.9.0-dev source passes 113 Python tests (including GUI, shared state, atomic full-profile restore and the HTTP SDK), 12 native C++ domain programs and eight browser JavaScript programs. The final local PlatformIO build succeeds at 58,820 bytes static RAM and 2,372,603 bytes program Flash (37.7% of a 6 MiB slot). The versioned local binary has a SHA-256 manifest; owner-configured binaries remain excluded from Git.
+
+Read-only checks of the owner's device report firmware 2.4.0-dev, app0 running, app1 ready (6 MiB) and boot health passed. No later milestone was flashed in this development pass. See DEVELOPMENT_STATUS.md for the scope and physical acceptance work still pending.

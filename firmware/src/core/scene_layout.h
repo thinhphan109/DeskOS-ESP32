@@ -3,7 +3,7 @@
 #include <string.h>
 #include "widget_contract.h"
 
-enum class WidgetKind : uint8_t { CLOCK, CPU, GPU, RAM, FOCUS, MUSIC, NETWORK, TEXT };
+enum class WidgetKind : uint8_t { CLOCK, CPU, GPU, RAM, FOCUS, MUSIC, NETWORK, TEXT, DATA_1, DATA_2, DATA_3 };
 struct SceneWidget {
   WidgetKind kind = WidgetKind::CLOCK;
   WidgetRegion bounds{0,0,162,40};
@@ -19,7 +19,7 @@ struct SceneLayout {
     if (count < 1 || count > CAPACITY) return false;
     for (uint8_t i=0;i<count;++i) {
       const auto &w=widgets[i];
-      if (static_cast<uint8_t>(w.kind)>7 || !w.bounds.fits(162,120) || w.bounds.width<32 || w.bounds.height<20) return false;
+      if (static_cast<uint8_t>(w.kind)>10 || !w.bounds.fits(162,120) || w.bounds.width<32 || w.bounds.height<20) return false;
       bool terminated=false;
       for (uint8_t j=0;j<32;++j) {
         if (!w.label[j]) { terminated=true; break; }
@@ -39,4 +39,5 @@ struct WidgetSnapshot {
   float cpu=-1, gpu=-1, ram=-1, down=-1;
   uint32_t focusSeconds=1500;
   const char *track="";
+  char external[3][32]={"N/A","N/A","N/A"};
 };

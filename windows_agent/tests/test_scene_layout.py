@@ -8,6 +8,11 @@ from scene_layout import DEFAULT_LAYOUT, validate_layout, save_layout, load_layo
 
 
 class SceneLayoutTests(unittest.TestCase):
+    def test_external_kind_ids_preserve_old_contract(self):
+        layout=copy.deepcopy(DEFAULT_LAYOUT);layout['widgets'][0]['kind']=10
+        self.assertEqual(validate_layout(layout)['widgets'][0]['kind'],10)
+        layout['widgets'][0]['kind']=11
+        with self.assertRaises(ValueError):validate_layout(layout)
     def test_roundtrip(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "scene.json"

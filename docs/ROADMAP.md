@@ -1,12 +1,16 @@
 # MèoDesk development roadmap
 
-20 November 2026. The user's supplied v1.8–v3.0 roadmap is the direction;
+21 November 2026. The user's supplied v1.8–v3.0 roadmap is the direction;
 version labels are planning milestones, not completed releases.
+
+See [current development status](DEVELOPMENT_STATUS.md) for implemented scope,
+validation evidence and remaining acceptance work.
 
 ## Current baseline
 
-- Physical device: owner-confirmed v1.7; read-only checks confirmed A/B OTA
-  readiness, 16 MiB Flash, 8 MiB PSRAM and device-reported ~25 FPS history.
+- Physical device: read-only check on 21 November reports 2.4.0-dev, healthy
+  app0 and OTA-ready app1 (6 MiB). Earlier v1.7 checks recorded N16R8 memory
+  and approximately 25 FPS history. No newer dev milestone was deployed in this pass.
 - Source/dev build: compact Personal Studio, shared WebSocket state,
   bounded Midnight clock refresh and initial Performance Lab instrumentation.
 - v1.8 source checkpoint is committed/pushed as `v1.8.0-dev`. The v1.9
@@ -78,3 +82,7 @@ Bounded notifications, private-by-default first-party payloads, quiet/priority/T
 ## v2.8 source checkpoint
 
 Six bounded rules, dwell/cooldown/latch semantics, atomic profile backup and synchronized advanced JSON editors are implemented. See [Automation](AUTOMATION_V28.md).
+
+## v2.9 source checkpoint
+
+Three expiring external-data widgets, paired feed endpoints and a stdlib Python/CLI integration client are implemented. See [Widget and Integration SDK](INTEGRATION_SDK_V29.md). The current board remains on its deployed firmware until the owner approves the later deployment phase.

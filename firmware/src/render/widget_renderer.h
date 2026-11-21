@@ -26,10 +26,12 @@ inline void drawWidgetScene(lgfx::LovyanGFX &target, const SceneLayout &layout,
       case WidgetKind::NETWORK: metric(data.down," KB/s"); break;
       case WidgetKind::FOCUS: snprintf(value,sizeof(value),"%lu:%02lu",static_cast<unsigned long>(data.focusSeconds/60),static_cast<unsigned long>(data.focusSeconds%60)); break;
       case WidgetKind::MUSIC: snprintf(value,sizeof(value),"%s",data.track&&data.track[0]?data.track:"No track"); break;
+      case WidgetKind::DATA_1: case WidgetKind::DATA_2: case WidgetKind::DATA_3:
+        snprintf(value,sizeof(value),"%s",data.external[static_cast<uint8_t>(widget.kind)-8]);break;
       case WidgetKind::TEXT: snprintf(value,sizeof(value),"%s",widget.label); break;
     }
     target.setTextColor(ink);
-    const bool large=r.width>=72 && r.height>=38 && widget.kind!=WidgetKind::MUSIC && widget.kind!=WidgetKind::TEXT;
+    const bool large=r.width>=72 && r.height>=38 && widget.kind!=WidgetKind::MUSIC && widget.kind!=WidgetKind::TEXT && strlen(value)*12<=static_cast<size_t>(r.width-8);
     target.setTextSize(large?2:1);
     target.setCursor(x+4,y+(r.height>=32?16:10)); target.print(value);
   }

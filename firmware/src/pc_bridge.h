@@ -7,6 +7,7 @@
 #include "core/scene_layout.h"
 #include "core/event_engine.h"
 #include "core/automation_rules.h"
+#include "core/integration_feed.h"
 
 struct PcTelemetry {
   bool received = false;
@@ -53,6 +54,7 @@ const SceneLayout &pcBridgeSceneLayout();
 const EventEngine::Event *pcBridgeActiveEvent();
 const RuleSet &pcBridgeRules();
 uint32_t pcBridgeRulesRevision();
+const IntegrationFeed &pcBridgeFeed(uint8_t slot);
 // Cover art is volatile PSRAM/internal SRAM, 64x64 RGB565, owned by the bridge. The pointer
 // must only be used on the Arduino main loop (HTTP and TFT are serviced there).
 const uint16_t *pcBridgeArtworkPixels();

@@ -153,6 +153,7 @@ class SceneEditor(QWidget):
             return
         item = self.data["widgets"][self.selection.currentIndex()]
         item.update(kind=self.kind.currentIndex(), label=self.label.text(), **{key:field.value() for key,field in self.fields.items()})
+        self.selection.setItemText(self.selection.currentIndex(),f"{self.selection.currentIndex()+1}. {item['label'] or KINDS[item['kind']]}")
         self.dirty = True; self.canvas.update()
         self.check()
 

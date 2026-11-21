@@ -360,7 +360,7 @@
               "kind": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7
+                "maximum": 10
               },
               "x": {
                 "type": "integer",
@@ -473,6 +473,40 @@
         }
       },
       "description": "The application enforces condition-specific threshold/hold limits and action-specific value ranges."
+    },
+    "integration_feed": {
+      "type": "object",
+      "required": [
+        "name",
+        "value",
+        "unit",
+        "ttl_s"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "pattern": "^[ -~]+$"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "pattern": "^[ -~]+$"
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 8,
+          "pattern": "^[ -~]*$"
+        },
+        "ttl_s": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

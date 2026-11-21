@@ -4,6 +4,8 @@ const source=raw.split('// SCENE_CONTRACT_BEGIN')[1].split('// SCENE_CONTRACT_EN
 const validate=vm.runInNewContext(source+';validateScene;');
 const valid={schema:1,widgets:[{kind:0,x:0,y:0,w:162,h:40,label:'Clock'}]};
 assert.equal(validate(valid).widgets.length,1);
+const external=structuredClone(valid);external.widgets[0].kind=10;assert.equal(validate(external).widgets[0].kind,10);
+external.widgets[0].kind=11;assert.throws(()=>validate(external));
 for(const [key,value] of [['x',1],['x',-1],['kind',true],['label','Mèo'],['label','x'.repeat(32)]]){
  const candidate=structuredClone(valid);candidate.widgets[0][key]=value;assert.throws(()=>validate(candidate));
 }

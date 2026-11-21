@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / "windows_agent"))
+from integration_feed import validate_feed
 from automation_rules import validate_rules
 from desk_notification import notification_payload
 from device_config import validate_backup
@@ -43,7 +44,7 @@ def current_web() -> bytes:
 START = time.monotonic()
 MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", "hotspot"]
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
-STATE = {"rules": {"schema":1,"rules":[]}, "rules_revision":0, "scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
+STATE = {"feeds": [None,None,None], "rules": {"schema":1,"rules":[]}, "rules_revision":0, "scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
          "lab_enabled": False,
          "focus_completed_total": 0, "focus_last_completed_min": 0, "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
          "scene_slots": [12, 0, 5, 2],
@@ -176,6 +177,13 @@ class Handler(BaseHTTPRequestHandler):
                                "events": [{"seq": 1, "code": "demo", "priority": 0,
                                            "message": "SIMULATED event / not hardware", "age_ms": 2500,
                                            "ttl_ms": 8000}]})
+        feed_match=re.fullmatch(r"/api/v1/feeds/([0-2])",url.path)
+        if feed_match:
+            slot=int(feed_match[1]);feed=STATE["feeds"][slot]
+            age=int((time.monotonic()-feed["at"])*1000) if feed else None
+            fresh=bool(feed and age<feed["ttl_s"]*1000)
+            return self.reply(dict(schema=1,slot=slot,name=feed["name"] if feed else "Data",value=feed["value"] if fresh else None,
+                                   unit=feed["unit"] if fresh else None,ttl_s=feed["ttl_s"] if feed else 30,age_ms=age,fresh=fresh,mode="demo"))
         if url.path == "/api/v1/rules":
             return self.reply(STATE["rules"])
         if url.path == "/api/v1/scene-layout":
@@ -192,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
             return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1", "automation_rules_v1"],
+                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1", "automation_rules_v1", "integration_feeds_v1"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -216,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
                                "motion_pc_intensity": 0,  # DEMO is NOT real CPU/GPU input.
                                "cat_energy": STATE["pet_energy"],
                                "scene_slots": STATE["scene_slots"], "artwork_ready": False,
-                               "rules_revision": STATE["rules_revision"], "rules_count": len(STATE["rules"]["rules"]), "scene_layout_revision": STATE["scene_layout_revision"], "page": STATE["page"], "page_count": 15,
+                               "feed_fresh": [bool(f and time.monotonic()-f["at"]<f["ttl_s"]) for f in STATE["feeds"]], "rules_revision": STATE["rules_revision"], "rules_count": len(STATE["rules"]["rules"]), "scene_layout_revision": STATE["scene_layout_revision"], "page": STATE["page"], "page_count": 15,
                                "media_available": True, "media_playing": True,
                                "command_pending": False, "command_seq": STATE["command_seq"],
                                "command_acknowledged": STATE["command_acknowledged"],
@@ -272,6 +280,10 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["settings"].update({key: clean[key] for key in STATE["settings"]})
                 STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=clean["focus_work_min"]*60)
                 return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+            feed_match=re.fullmatch(r"/api/v1/feeds/([0-2])",self.path)
+            if feed_match:
+                slot=int(feed_match[1]);feed=validate_feed(data);feed["at"]=time.monotonic();STATE["feeds"][slot]=feed
+                return self.reply(dict(ok=True,slot=slot,ttl_s=feed["ttl_s"],mode="demo"))
             if self.path == "/api/v1/rules":
                 STATE["rules"]=validate_rules(data);STATE["rules_revision"]+=1
                 return self.reply({"ok":True,"persisted":False,"mode":"demo"})

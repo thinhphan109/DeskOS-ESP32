@@ -344,8 +344,21 @@ const uint16_t *catForPage(Page page) {
 }
 
 bool pageHasRealData(Page page) {
+  if(page==CUSTOM_PAGE) {
+    bool live=false;const auto &layout=pcBridgeSceneLayout();
+    for(uint8_t i=0;i<layout.count;++i) {
+      const auto kind=layout.widgets[i].kind;
+      if(kind==WidgetKind::CPU||kind==WidgetKind::GPU||kind==WidgetKind::RAM||kind==WidgetKind::NETWORK) {
+        if(pcTelemetryFresh()){if(pcTelemetry.demo)return false;live=true;}
+      } else if(kind==WidgetKind::CLOCK){tm local{};live=realClock(local)||live;}
+      else if(kind==WidgetKind::FOCUS||kind==WidgetKind::TEXT)live=true;
+      else if(kind==WidgetKind::MUSIC)live=(pcMedia.fresh(millis())&&pcMedia.available)||live;
+      else if(static_cast<uint8_t>(kind)>=8)live=pcBridgeFeed(static_cast<uint8_t>(kind)-8).fresh(millis())||live;
+    }
+    return live;
+  }
   if (page == PC_PAGE || page == HEALTH_PAGE || page == TRENDS_PAGE ||
-      page == HOME_PAGE || page == PC_NETWORK_PAGE || page == CUSTOM_PAGE)
+      page == HOME_PAGE || page == PC_NETWORK_PAGE)
     return pcTelemetryFresh() && !pcTelemetry.demo;
   if (page == CLOCK_PAGE) {
     tm local{};
@@ -355,12 +368,22 @@ bool pageHasRealData(Page page) {
   return page == NETWORK_PAGE || page == SYSTEM_PAGE || page == FOCUS_PAGE;
 }
 
+bool customSceneHasDemo() {
+  if(!pcTelemetryFresh()||!pcTelemetry.demo)return false;
+  const auto &layout=pcBridgeSceneLayout();
+  for(uint8_t i=0;i<layout.count;++i) {
+    const auto kind=layout.widgets[i].kind;
+    if(kind==WidgetKind::CPU||kind==WidgetKind::GPU||kind==WidgetKind::RAM||kind==WidgetKind::NETWORK)return true;
+  }
+  return false;
+}
+
 void drawHeaderStatus() {
   const bool live = pageHasRealData(currentPage);
-  const bool waiting = (currentPage == PC_PAGE || currentPage == HEALTH_PAGE ||
+  const bool waiting = (currentPage==CUSTOM_PAGE && !live && !customSceneHasDemo()) || ((currentPage == PC_PAGE || currentPage == HEALTH_PAGE ||
                         currentPage == TRENDS_PAGE || currentPage == HOME_PAGE ||
                         currentPage == PC_NETWORK_PAGE)
-                       && !pcTelemetryFresh();
+                       && !pcTelemetryFresh());
   tft.fillRoundRect(244, 9, 65, 25, 12, live ? MINT : PEACH);
   label(waiting ? "WAIT" : live ? "LIVE" : "DEMO", 266, 17,
         live ? TEAL : CORAL);
@@ -567,6 +590,7 @@ void drawCard() {
       if (pcTelemetryFresh()) { data.cpu=pcTelemetry.cpuPercent; data.gpu=pcTelemetry.gpuPercent; data.ram=pcTelemetry.ramPercent; data.down=pcTelemetry.netDownKbps; }
       data.focusSeconds=focusTimer.remainingSeconds(nowMs);
       if (pcMedia.fresh(nowMs) && pcMedia.available) data.track=pcMedia.title;
+      for(uint8_t slot=0;slot<3;++slot)pcBridgeFeed(slot).format(data.external[slot],sizeof(data.external[slot]),nowMs);
       drawWidgetScene(*surface,pcBridgeSceneLayout(),data,CARD_X-surfaceOriginX,CARD_Y-surfaceOriginY,INK,MUTED,TRACK);
       break;
     }
@@ -1556,7 +1580,7 @@ void loop() {
                        cardWidget.alignSeconds, catMotion && catDmaReady, catPacer.untilNextUs(micros()))) {
       drawCard();
       if (currentPage == CLOCK_PAGE || currentPage == PC_PAGE || currentPage == HOME_PAGE ||
-          currentPage == HEALTH_PAGE)
+          currentPage == HEALTH_PAGE || currentPage == CUSTOM_PAGE)
         drawHeaderStatus();
   }
 
