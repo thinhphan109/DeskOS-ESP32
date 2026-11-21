@@ -9,6 +9,7 @@
 #include <openssl/evp.h>
 #include "cat_pack.h"
 #include "cat_assets.h"
+#include "core/update_contract.h"
 
 MockEsp ESP;
 MockSerial Serial;
@@ -67,6 +68,9 @@ static void writeComplete(CatPackManager &manager, const std::vector<uint8_t> &i
   }
   assert(manager.finish());
   assert(manager.phase() == CatPackManager::READY_REBOOT);
+  assert(MimiUpdate::coordinator().owner()==MimiUpdate::Owner::CatPack);
+  // The following fresh manager models a reboot, including volatile locks.
+  MimiUpdate::coordinator()=MimiUpdate::Coordinator{};
 }
 
 int main() {

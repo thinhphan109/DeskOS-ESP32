@@ -1,6 +1,6 @@
 # Đề xuất OTA từ máy chủ cho mimi.desk
 
-Ngày 21/11/2026. Người dùng chọn hai chế độ có thể đổi từ Web hoặc app: **tự kiểm tra, bấm cập nhật** và **tự cập nhật khi có bản mới**. Đây là thiết kế để thảo luận; chưa dựng server, bật tự cập nhật hoặc ghi firmware lên bo.
+Ngày 21/11/2026. Người dùng chọn hai chế độ có thể đổi từ Web hoặc app: **tự kiểm tra, bấm cập nhật** và **tự cập nhật khi có bản mới**. Reader/API/publisher đã được triển khai ở [v2.13](SERVER_OTA_V213.md); tài liệu này giữ cơ sở thiết kế. Chưa dựng hosting thật, bật tự cập nhật hoặc ghi firmware lên bo.
 
 ## Luồng đề xuất
 

@@ -1,4 +1,5 @@
 #include "cat_pack.h"
+#include "core/update_contract.h"
 
 #include <esp_heap_caps.h>
 #include <mbedtls/version.h>
@@ -167,6 +168,7 @@ void CatPackManager::initialize() {
 }
 
 void CatPackManager::fail(const char *reason) {
+  if (ownsLease_) { MimiUpdate::coordinator().release(MimiUpdate::Owner::CatPack); ownsLease_ = false; }
   if (hashing_) {mbedtls_sha256_free(&sha_); hashing_ = false;}
   phase_ = ERROR;
   snprintf(message_, sizeof(message_), "%s", reason);
@@ -178,6 +180,8 @@ void CatPackManager::abort(const char *reason) {fail(reason);}
 bool CatPackManager::begin(const String &sha, uint32_t bytes) {
   if (busy() || !availableFor(bytes)) return false;
   if (!validHex(sha)) {fail("Invalid SHA-256 header");return false;}
+  if (!MimiUpdate::coordinator().acquire(MimiUpdate::Owner::CatPack)) return false;
+  ownsLease_ = true;
   uploadBytes_ = bytes;
   uploadBank_ = activeBank_ == 0 ? 1 : 0;
   const uint32_t eraseBytes = DATA_OFFSET + ((bytes + 4095) / 4096) * 4096;

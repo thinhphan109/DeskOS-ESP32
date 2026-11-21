@@ -55,6 +55,7 @@ class MeoOtaManager {
   bool otaLive_ = false;
   bool selfTestDone_ = false;
   bool bootHealthy_ = false;
+  bool ownsLease_ = false;
 };
 
 extern MeoOtaManager meoOta;

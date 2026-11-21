@@ -15,7 +15,7 @@ jobs:
       - run: python -m unittest discover -s windows_agent/tests -q
       - name: Native domain tests
         run: |
-          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life theme_palette media_timeline desk_notification automation_rules integration_feed music_text; do
+          for test in domain motion_director card_refresh performance_lab device_profile scene_layout cat_life theme_palette media_timeline desk_notification automation_rules integration_feed music_text update_contract; do
             g++ -std=c++17 -Wall -Wextra -Werror firmware/tools/test_${test}.cpp -o /tmp/meodesk-${test}
             /tmp/meodesk-${test}
           done
@@ -41,5 +41,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install platformio
-      - run: cp firmware/src/app_config.example.h firmware/src/app_config.h
-      - run: pio run -d firmware
+      - run: pio run -d firmware -e mimi-public

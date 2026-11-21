@@ -3,6 +3,7 @@
 #include "core/utf8_text.h"
 #include "ota_manager.h"
 #include "cat_pack.h"
+#include "server_updater.h"
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -14,7 +15,11 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef MIMI_PUBLIC_FIRMWARE
+#include "app_config.public.h"
+#else
 #include "app_config.h"
+#endif
 #include "app_version.h"
 #include "cat_assets.h"
 #include "mood_filter.h"
@@ -65,6 +70,7 @@ static uint32_t otaHistoryCheckMs = 0;
 static bool stateAuthorized[4] = {};
 static Preferences prefs;
 static bool prefsReady = false;
+static String apiKey, apSsid, apPassword;
 static DeviceProfile deviceProfile;
 static SceneLayout sceneLayout;
 static uint32_t sceneLayoutRevision=0;
@@ -357,14 +363,15 @@ static void saveOtaHistory() {
   prefs.putString("ota_history", data);
 }
 
-static void recordOtaUpload() {
+static void recordOtaUpload(const char *sha = nullptr, const char *version = nullptr) {
   JsonArray list = otaHistory.as<JsonArray>();
   if (list.isNull()) list = otaHistory.to<JsonArray>();
   if (list.size() >= 6) list.remove(0);
   JsonObject item = list.add<JsonObject>();
   const esp_partition_t *target = esp_ota_get_next_update_partition(nullptr);
   item["phase"] = "uploaded"; item["version_before"] = MEO_VERSION;
-  item["sha256"] = httpServer.header("X-MEO-OTA-SHA256");
+  item["sha256"] = sha ? String(sha) : httpServer.header("X-MEO-OTA-SHA256");
+  if(version)item["expected_version"]=version;
   item["target_slot"] = target ? target->label : "N/A";
   item["uptime_ms"] = millis();
   saveOtaHistory();
@@ -512,7 +519,7 @@ static void captureRuntimeProfile() {
 }
 
 static bool authorized() {
-  if (httpServer.header("X-MEO-KEY") == MEO_API_KEY) return true;
+  if (httpServer.header("X-MEO-KEY") == apiKey) return true;
   replyError(401, "invalid pairing key");
   return false;
 }
@@ -778,7 +785,7 @@ static void receiveArtworkUpload() {
     artworkUploadId[0] = '\0';
     const String id = httpServer.header("X-MEO-ART-ID");
     artworkUploadAccept = artworkPixels && artworkIncoming &&
-                          httpServer.header("X-MEO-KEY") == MEO_API_KEY &&
+                          httpServer.header("X-MEO-KEY") == apiKey &&
                           validArtId(id.c_str()) && pcMedia.fresh(millis()) &&
                           !strcmp(pcMedia.artworkId, id.c_str());
     if (artworkUploadAccept)
@@ -1039,6 +1046,11 @@ static void receiveTelemetry() {
 
 static void fillStatus(JsonDocument &doc) {
   doc["version"] = MEO_VERSION;
+#ifdef MIMI_PUBLIC_FIRMWARE
+  doc["build_flavor"] = "mimi-public-firmware-v1:" MEO_VERSION;
+#else
+  doc["build_flavor"] = "mimi-private-bridge-v1:" MEO_VERSION;
+#endif
   doc["state_revision"] = stateRevision;
   doc["scene_layout_revision"] = sceneLayoutRevision;
   doc["rules_revision"]=rulesRevision;
@@ -1078,6 +1090,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("widget_scene_v1");
   doc["state_ws_port"] = 81;
   if (meoOta.available()) capabilities.add("ota_local_ab_v1");
+  if (meoOta.available()) capabilities.add("ota_pull_v1");
   if (catPack.available()) capabilities.add("catpack_ab_v1");
   if (catPack.availableFor(CatPackManager::MOTION_BYTES))
     capabilities.add("catpack_motion_v2");
@@ -1095,7 +1108,9 @@ static void fillStatus(JsonDocument &doc) {
   doc["wifi_sta_status"] = (int)WiFi.status();
   doc["wifi_scan_active"] = wifiScanActive;
   doc["wifi_last_disconnect_reason"] = (int)lastStaDisconnectReason;
-  doc["wifi_ssid"] = pcNetworkConnected() ? WiFi.SSID() : String(MEO_AP_SSID);
+  doc["wifi_ssid"] = pcNetworkConnected() ? WiFi.SSID() : apSsid;
+  serverUpdater.writePolicy(doc["update_policy"].to<JsonObject>(), false);
+  serverUpdater.writeState(doc["update_state"].to<JsonObject>());
   doc["wifi_rssi"] = pcNetworkConnected() ? WiFi.RSSI() : 0;
   doc["ip"] = pcNetworkIP();
   doc["ap_ip"] = WiFi.softAPIP().toString();
@@ -1494,7 +1509,7 @@ static void receiveFirmwareUpload() {
   if (upload.status == UPLOAD_FILE_START) {
     otaUploadStarted = false;
     otaUploadFinished = false;
-    if (httpServer.header("X-MEO-KEY") != MEO_API_KEY || catPack.busy()) {
+    if (httpServer.header("X-MEO-KEY") != apiKey || catPack.busy() || serverUpdater.busy()) {
       // Do not invoke the OTA engine or write flash for unauthenticated clients.
       return;
     }
@@ -1544,7 +1559,7 @@ static void receiveFirmwareUpload() {
 }
 
 static void finishFirmwareUpload() {
-  if (httpServer.header("X-MEO-KEY") != MEO_API_KEY) {
+  if (httpServer.header("X-MEO-KEY") != apiKey) {
     replyError(401, "invalid pairing key");
     return;
   }
@@ -1592,7 +1607,7 @@ static void receiveCatPackUpload() {
   HTTPUpload &upload = httpServer.upload();
   if (upload.status == UPLOAD_FILE_START) {
     catPackUploadStarted = catPackUploadFinished = false;
-    if (httpServer.header("X-MEO-KEY") != MEO_API_KEY || meoOta.busy()) return;
+    if (httpServer.header("X-MEO-KEY") != apiKey || meoOta.busy() || serverUpdater.busy()) return;
     size_t expected = 0;
     if (!parseOtaLength(httpServer.header("X-MEO-CAT-SIZE"), expected) ||
         !catPack.availableFor(expected)) {
@@ -1632,7 +1647,7 @@ static void receiveCatPackUpload() {
 }
 
 static void finishCatPackUpload() {
-  if (httpServer.header("X-MEO-KEY") != MEO_API_KEY) {
+  if (httpServer.header("X-MEO-KEY") != apiKey) {
     replyError(401, "invalid pairing key");
     return;
   }
@@ -1648,6 +1663,34 @@ static void finishCatPackUpload() {
   replyJson(200, doc);
   catPackUploadFinished = false;
   otaRebootAtMs = millis() + 1800UL;
+}
+
+static void sendUpdatePolicy() {
+  if(!authorized())return;
+  JsonDocument doc;serverUpdater.describe(doc);replyJson(200,doc);
+}
+static void updateRequest(uint8_t operation) {
+  if(!authorized())return;
+  JsonDocument body;const String raw=httpServer.arg("plain");
+  if(raw.length()>2048 || deserializeJson(body,raw)) {replyError(400,"invalid_update_request");return;}
+  String error;int status=400;bool ok=false;
+  if(operation==0)ok=serverUpdater.configure(body.as<JsonVariantConst>(),error,status);
+  else if(operation==1)ok=serverUpdater.check(body["command_id"]|"",error,status);
+  else if(body["expected_revision"].is<uint32_t>())ok=serverUpdater.start(body["release_id"]|"",
+      body["expected_revision"].as<uint32_t>(),body["command_id"]|"",error,status);
+  else error="policy_conflict";
+  if(!ok){replyError(status,error.c_str());return;}
+  JsonDocument doc;serverUpdater.describe(doc);doc["ok"]=true;replyJson(200,doc);
+}
+static void sendLocalPairing() {
+  const IPAddress remote=httpServer.client().remoteIP(), local=WiFi.softAPIP();
+  if(pcNetworkConnected() || remote[0]!=local[0] || remote[1]!=local[1] || remote[2]!=local[2]) {
+    replyError(403,"connect_to_device_setup_wifi");return;
+  }
+  if(!prefsReady){replyError(503,"pairing_storage_unavailable");return;}
+  JsonDocument doc;doc["schema"]=1;doc["pairing_key"]=apiKey;
+  doc["device_id"]=String(static_cast<uint32_t>(ESP.getEfuseMac()&0xffffffffULL),HEX);
+  replyJson(200,doc);
 }
 
 void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
@@ -1676,6 +1719,24 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
     wifiSsid = WIFI_SSID;
     wifiPassword = WIFI_PASSWORD;
   }
+  apiKey = prefsReady ? prefs.getString("api_key", MEO_API_KEY) : String(MEO_API_KEY);
+  if (apiKey.isEmpty()) {
+    char generated[33];snprintf(generated,sizeof(generated),"%08lx%08lx%08lx%08lx",
+      static_cast<unsigned long>(esp_random()),static_cast<unsigned long>(esp_random()),
+      static_cast<unsigned long>(esp_random()),static_cast<unsigned long>(esp_random()));
+    apiKey=generated;
+  }
+  apSsid=prefsReady?prefs.getString("ap_ssid",MEO_AP_SSID):String(MEO_AP_SSID);
+  apPassword=prefsReady?prefs.getString("ap_pw",MEO_AP_PASSWORD):String(MEO_AP_PASSWORD);
+  // One-time bridge: persist private compiled defaults before generic firmware replaces them.
+  if(prefsReady) {
+    if(prefs.getString("api_key","").isEmpty())prefs.putString("api_key",apiKey);
+    if(!prefs.isKey("ssid"))prefs.putString("ssid",wifiSsid);
+    if(!prefs.isKey("wifi_pw"))prefs.putString("wifi_pw",wifiPassword);
+    if(!prefs.isKey("ap_ssid"))prefs.putString("ap_ssid",apSsid);
+    if(!prefs.isKey("ap_pw"))prefs.putString("ap_pw",apPassword);
+  }
+  serverUpdater.begin(otaModeHandler, [](){recordOtaUpload(serverUpdater.activeSha(),serverUpdater.activeVersion());otaRebootAtMs=millis()+1800UL;});
   deviceProfile.theme = savedTheme; deviceProfile.fps = savedFpsProfile; deviceProfile.style = savedMotionStyle;
   deviceProfile.cpu = healthSettings.cpuLimit; deviceProfile.gpu = healthSettings.gpuLimit;
   deviceProfile.temperature = healthSettings.tempLimit; deviceProfile.battery = healthSettings.batteryLimit;
@@ -1706,7 +1767,7 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   applyProfileMetadata();
   WiFi.onEvent(onWifiEvent);
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(MEO_AP_SSID, MEO_AP_PASSWORD);
+  WiFi.softAP(apSsid.c_str(), apPassword.c_str());
   WiFi.setAutoReconnect(true);
   if (wifiSsid.length()) {
     lastStaAttemptMs = millis();
@@ -1729,6 +1790,11 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/performance", HTTP_GET, sendPerformanceHistory);
   httpServer.on("/api/v1/ota/status", HTTP_GET, sendOtaStatus);
   httpServer.on("/api/v1/ota/history", HTTP_GET, sendOtaHistory);
+  httpServer.on("/api/v1/update-policy",HTTP_GET,sendUpdatePolicy);
+  httpServer.on("/api/v1/update-policy",HTTP_POST,[](){updateRequest(0);});
+  httpServer.on("/api/v1/update/check",HTTP_POST,[](){updateRequest(1);});
+  httpServer.on("/api/v1/update/start",HTTP_POST,[](){updateRequest(2);});
+  httpServer.on("/api/v1/pairing",HTTP_GET,sendLocalPairing);
   httpServer.on("/api/v1/ota/upload", HTTP_POST, finishFirmwareUpload, receiveFirmwareUpload);
   httpServer.on("/api/v1/catpack/status", HTTP_GET, sendCatPackStatus);
   httpServer.on("/api/v1/catpack/upload", HTTP_POST, finishCatPackUpload, receiveCatPackUpload);
@@ -1779,20 +1845,21 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
       JsonDocument request;
       if (!deserializeJson(request, payload, length) && request["type"] == "subscribe") {
         stateAuthorized[client] = request["key"].is<const char *>() &&
-                                 request["key"].as<String>() == MEO_API_KEY;
+                                 request["key"].as<String>() == apiKey;
         stateDirty = true;
       }
     }
     // State channel is read-only. Mutations continue through the existing
     // keyed HTTP handlers, with one authoritative broadcast after commit.
   });
-  Serial.printf("[WEB] AP %s / http://%s\n", MEO_AP_SSID,
+  Serial.printf("[WEB] AP %s / http://%s\n", apSsid.c_str(),
                 WiFi.softAPIP().toString().c_str());
 }
 
 void pcBridgeLoop() {
   httpServer.handleClient();
   stateSocket.loop();
+  serverUpdater.loop(pcNetworkConnected(), focusModeActive);
   publishState();
   if (otaRebootAtMs && static_cast<int32_t>(millis() - otaRebootAtMs) >= 0) {
     Serial.println(catPack.busy() ? "[CATPACK] Restarting to load verified sprite bank"

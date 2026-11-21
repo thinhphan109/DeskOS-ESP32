@@ -1,4 +1,5 @@
 #include "ota_manager.h"
+#include "core/update_contract.h"
 
 #include <esp_partition.h>
 #include <mbedtls/version.h>
@@ -62,6 +63,7 @@ bool MeoOtaManager::shaFinish(mbedtls_sha256_context *ctx, uint8_t *digest) {
 }
 
 void MeoOtaManager::fail(const char *message) {
+  if (ownsLease_) { MimiUpdate::coordinator().release(MimiUpdate::Owner::Firmware); ownsLease_ = false; }
   if (otaLive_) {
     esp_ota_abort(handle_);
     otaLive_ = false;
@@ -92,6 +94,8 @@ bool MeoOtaManager::begin(size_t bytes, const String &sha256, const String &boar
     fail("No independent inactive OTA partition");
     return false;
   }
+  if (!MimiUpdate::coordinator().acquire(MimiUpdate::Owner::Firmware)) return false;
+  ownsLease_ = true;
   // Delay erasing the previous inactive image until the first 16 bytes prove
   // this really targets ESP32-S3. A wrong-chip upload must not destroy the
   // potential rollback image in the inactive slot.

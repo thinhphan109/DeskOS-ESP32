@@ -82,6 +82,7 @@ class CatPackManager {
   char message_[100] = "Built-in cat sprites";
   Phase phase_ = IDLE;
   bool hashing_ = false;
+  bool ownsLease_ = false;
   mbedtls_sha256_context sha_{};
 };
 

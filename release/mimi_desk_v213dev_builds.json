@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "artifacts": [
+    {
+      "flavor": "public",
+      "version": "2.13.0-dev",
+      "size": 2685056,
+      "sha256": "45a0f6691b7395c4c04104389b6b9fd17955d2f85f540a5af8bfa3a1543c06ea"
+    },
+    {
+      "flavor": "private_bridge",
+      "version": "2.13.0-dev",
+      "size": 2685120,
+      "sha256": "f77cd2fa046030b73a13c3d5531d0516a711689ee4ae8a0e02d35ab95ba58fa6"
+    }
+  ],
+  "native_checks": [
+    "update_contract",
+    "ota_manager",
+    "cat_pack"
+  ],
+  "publisher_tests": 3,
+  "private_value_checks": 2,
+  "deployed": false
+}

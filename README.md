@@ -4,14 +4,15 @@ Public Git checkouts exclude private configuration and firmware binaries.
 Start with [SOURCE_CHECKOUT.md](docs/SOURCE_CHECKOUT.md); private-ZIP notes
 below describe the original archive, not files published in this repository.
 
-The current firmware source milestone is **2.11.0-dev**: Scene Studio, shared state,
+The current firmware source milestone is **2.13.0-dev**: Scene Studio, shared state,
 Cat Life, dashboard themes, productivity, bounded automation, integration feeds,
 an expanded TFT Music scene with embedded Vietnamese glyphs, and a redesigned Web/Windows workspace.
 See [development status](docs/DEVELOPMENT_STATUS.md) for implemented scope,
 validation and remaining hardware acceptance, and [SDK usage](docs/INTEGRATION_SDK_V29.md).
 This is a development build, with deployment kept separate from source releases.
 Windows Companion is now **2.12.0-dev**, with independent local music, single-instance
-activation and bounded reconnect; firmware source remains at **2.11.0-dev**.
+activation and bounded reconnect. Firmware **2.13.0-dev** adds the
+[server OTA reader and bridge](docs/SERVER_OTA_V213.md), with deployment still deferred.
 See [desktop stability](docs/DESKTOP_STABILITY_V212.md) for scope and focused checks.
 See [the desktop and OTA production plan](docs/PRODUCTION_PLAN.md) for proposed naming,
 product messages, update flow and acceptance gates. The display brand is now **mimi.desk**;

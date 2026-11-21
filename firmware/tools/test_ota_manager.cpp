@@ -7,6 +7,7 @@
 #include <vector>
 #include <openssl/evp.h>
 #include "ota_manager.h"
+#include "core/update_contract.h"
 
 MockEsp ESP;
 MockSerial Serial;
@@ -67,6 +68,10 @@ int main() {
   assert(!meoOta.begin(image.size(), String(sha(image)), String("wrong-device")));
   assert(begins == 0);
 
+  assert(MimiUpdate::coordinator().acquire(MimiUpdate::Owner::CatPack));
+  assert(!meoOta.begin(image.size(), String(sha(image)), String(MeoOtaManager::BOARD_ID)));
+  assert(begins == 0);
+  MimiUpdate::coordinator().release(MimiUpdate::Owner::CatPack);
   assert(meoOta.begin(image.size(), String(sha(image)), String(MeoOtaManager::BOARD_ID)));
   assert(meoOta.append(image.data(), 1));
   assert(meoOta.append(image.data() + 1, 5));
@@ -82,6 +87,9 @@ int main() {
   meoOta.confirmRunningImageAfterSelfTest(true);
   assert(!strcmp(meoOta.bootHealth(), "passed"));
   assert(confirms == 1);
+  assert(MimiUpdate::coordinator().owner()==MimiUpdate::Owner::Firmware);
+  // A real reboot resets the in-RAM coordinator before the next manager exists.
+  MimiUpdate::coordinator()=MimiUpdate::Coordinator{};
 
   // New manager instance (new firmware boot) rejects an ESP32-C3 header
   // without erasing the previous inactive slot.
