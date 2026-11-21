@@ -19,6 +19,16 @@ Web đã quan sát ở desktop và 390px: không tràn ngang, canvas Studio co t
 
 ![Web mimi.desk](mimi-web-v211.png)
 
+## Phân biệt DEMO và nhạc thật
+
+Người dùng xác nhận cửa sổ gặp hiện tượng không nhận Spotify có tiêu đề `DEMO / Xem trước`. Chế độ này chỉ dùng nhạc mẫu, không đọc phiên nhạc Windows và không lưu cấu hình thiết bị. Chưa có bằng chứng tái hiện lỗi do mở Spotify trước app ở chế độ thật.
+
+App đã thêm giải thích trên mọi trang DEMO, mô tả riêng tại Âm nhạc và nút **Mở chế độ thật**. Nút mở cửa sổ riêng bằng cấu hình đã lưu, không chuyển IP hoặc mã ghép nối trong DEMO qua dòng lệnh. Cửa sổ thật luôn hiện khi mở từ nút này, kể cả khi đã chọn khởi động thu nhỏ. Nếu chưa kết nối, nhập lại thông tin tại **Thiết bị** trong cửa sổ thật.
+
+Chạy từ source ở thư mục dự án: `.venv/Scripts/pythonw.exe windows_agent/companion.py --show`. Thêm `--preview` chỉ khi muốn xem bố cục với dữ liệu mẫu. Cửa sổ DEMO đã mở trước khi sửa cần mở lại để thấy nút mới.
+
+Kiểm tra bổ sung: 7 bài smoke GUI đã qua, gồm mở chế độ thật từ source/EXE, chặn nhấn lặp và cho phép thử lại khi không mở được tiến trình. Chưa xác minh phát nhạc Spotify thật; không build lại hoặc OTA firmware cho thay đổi Python này.
+
 ## Chưa triển khai
 
 Chưa OTA lên thiết bị, chưa phát hành binary lên server, chưa tự cập nhật EXE Windows và chưa đổi bootloader/phân vùng. `MeoDesk` trong định danh giao thức, đường dẫn dữ liệu và tên package cũ là tương thích kỹ thuật, không phải tên hiển thị bị bỏ sót.

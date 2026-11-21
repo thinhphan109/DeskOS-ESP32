@@ -13,6 +13,7 @@ import threading
 import webbrowser
 import sqlite3
 import math
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal, QTimer, QUrl, QSignalBlocker, QSize
@@ -182,7 +183,18 @@ class MainWindow(QMainWindow):
         self.page_trail=text("mimi.desk / Tổng quan", "pageTrail")
         self.connection_badge=text("Chưa có thiết bị", "connectionBadge")
         top.addWidget(self.page_trail); top.addStretch(); top.addWidget(self.connection_badge)
+        if preview:
+            self.open_live_button = button("Mở chế độ thật", primary=True)
+            self.open_live_button.setToolTip("Dùng cấu hình đã lưu. Thông tin nhập trong DEMO không được lưu.")
+            self.open_live_button.clicked.connect(self.open_live_app)
+            top.addWidget(self.open_live_button)
         pagebox.addLayout(top)
+        if preview:
+            self.preview_notice = text(
+                "Đang xem trước với dữ liệu mẫu. DEMO không đọc Spotify và không kết nối thiết bị. "
+                "Mở chế độ thật để dùng nhạc trên PC; cấu hình nhập trong DEMO không được lưu.",
+                "subtitle", wrap=True)
+            pagebox.addWidget(self.preview_notice)
         pagebox.addWidget(self.stack)
         frame.addWidget(area, 1)
         self.make_overview()
@@ -219,7 +231,7 @@ class MainWindow(QMainWindow):
             self.hint.setText("DEMO · dữ liệu mô phỏng · không kết nối hoặc cập nhật thiết bị")
             self.sync_label.setText("DEMO · xem trước trên máy")
             self.update_from_worker({"type":"media", "data":{"available":True,"playing":False,
-                "title":"Đừng làm trái tim anh đau", "artist":"Sơn Tùng M-TP · DEMO",
+                "title":"Bản nhạc mẫu · Tiếng Việt", "artist":"Dữ liệu mô phỏng · không phải Spotify",
                 "position_ms":92000,"duration_ms":227000}})
             for age in range(60,-1,-1):
                 self.pc_chart.history.add({"demo":True,"cpu_percent":25+7*math.sin(age/8),"gpu_percent":14+5*math.sin(age/10),"ram_percent":60+2*math.sin(age/16)},"preview",now=time.monotonic()-age)
@@ -234,8 +246,28 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(250, self.start_agent)
             else:
                 self.update_from_worker({"type": "state", "message": "Nhập pairing key ở tab Thiết bị để bắt đầu"})
-        if self.settings.start_minimized or "--minimized" in sys.argv:
+        if "--show" not in sys.argv and (self.settings.start_minimized or "--minimized" in sys.argv):
             QTimer.singleShot(0, self.hide)
+
+    def open_live_app(self) -> None:
+        if not self.preview_mode or not self.open_live_button.isEnabled():
+            return
+        command = [sys.executable]
+        if not getattr(sys, "frozen", False):
+            command.append(str(Path(__file__).resolve()))
+        command.append("--show")
+        try:
+            subprocess.Popen(command, cwd=str(Path(sys.executable).parent)
+                             if getattr(sys, "frozen", False) else str(Path(__file__).resolve().parent))
+        except OSError:
+            self.preview_notice.setText(
+                "Chưa mở được chế độ thật. Hãy chạy lại mimi.desk không có tham số --preview.")
+            return
+        self.open_live_button.setEnabled(False)
+        self.open_live_button.setText("Đã mở chế độ thật")
+        self.preview_notice.setText(
+            "Đã yêu cầu mở mimi.desk ở cửa sổ riêng. Trong cửa sổ mới, vào Thiết bị để kết nối. "
+            "Cửa sổ này vẫn là DEMO và không đọc Spotify.")
 
     def heading(self, root: QVBoxLayout, eyebrow: str, heading: str, sub: str) -> None:
         root.addWidget(text(heading, "title"))
@@ -359,7 +391,9 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "03 / NOW PLAYING", "Nhạc đang phát", "Spotify và các trình phát hỗ trợ Windows Media Controls.")
+        self.heading(box, "03 / NOW PLAYING", "Nhạc đang phát",
+                     "Nhạc mẫu để xem bố cục. Chế độ DEMO không đọc phiên Spotify trên PC."
+                     if self.preview_mode else "Spotify và các trình phát hỗ trợ Windows Media Controls.")
         panel, p = card("musicPanel")
         panel.setMinimumHeight(380)
         panel.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Maximum)

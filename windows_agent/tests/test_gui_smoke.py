@@ -70,8 +70,47 @@ class GuiSmokeTests(unittest.TestCase):
                 self.assertTrue(win.studio_buttons["theme"][2].isChecked())
                 self.assertTrue(win.motion_style_buttons[0].isChecked())
                 self.assertIn("DEMO", win.windowTitle())
+                self.assertIn("không đọc Spotify", win.preview_notice.text())
+                self.assertIn("mẫu", win.song.text())
             finally:
                 win.quit_app()
+
+    def test_preview_opens_live_app_without_preview_or_pairing_draft(self):
+        from PySide6.QtWidgets import QApplication
+        import companion
+        app = QApplication.instance() or QApplication([])
+        win = companion.MainWindow(preview=True)
+        try:
+            win.host_edit.setText("192.0.2.25")
+            with patch("companion.subprocess.Popen") as launch:
+                win.open_live_button.click()
+                win.open_live_app()
+                launch.assert_called_once()
+                command = launch.call_args.args[0]
+                self.assertEqual(command, [sys.executable, str(Path(companion.__file__).resolve()), "--show"])
+                self.assertFalse(win.open_live_button.isEnabled())
+                self.assertTrue(win.preview_mode)
+                self.assertIsNone(win.worker)
+        finally:
+            win.quit_app()
+
+    def test_preview_live_launch_failure_can_retry_packaged_app(self):
+        from PySide6.QtWidgets import QApplication
+        import companion
+        app = QApplication.instance() or QApplication([])
+        win = companion.MainWindow(preview=True)
+        try:
+            with patch("companion.sys.frozen", True, create=True), patch("companion.subprocess.Popen") as launch:
+                launch.side_effect = OSError("cannot launch")
+                win.open_live_button.click()
+                self.assertTrue(win.open_live_button.isEnabled())
+                self.assertIn("Chưa mở được", win.preview_notice.text())
+                launch.side_effect = None
+                win.open_live_button.click()
+                self.assertEqual(launch.call_args.args[0], [sys.executable, "--show"])
+                self.assertFalse(win.open_live_button.isEnabled())
+        finally:
+            win.quit_app()
 
     def test_two_clients_receive_same_authoritative_studio_state(self):
         from PySide6.QtCore import QUrl
