@@ -43,7 +43,7 @@ MOODS = ["paused", "low_battery", "rescue", "power", "sleep", "hot", "healthy", 
 ART = {"paused": "paused", "low_battery": "shutdown", "rescue": "rescue", "power": "power", "sleep": "sleep", "hot": "health", "healthy": "healthy", "hotspot": "hotspot", "stressed": "storage", "demo": "music"}
 STATE = {"scene_layout": copy.deepcopy(DEFAULT_LAYOUT), "scene_layout_revision": 0, "page": 12, "motion": True, "auto_pages": False, "focus_running": False,
          "lab_enabled": False,
-         "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
+         "focus_completed_total": 0, "focus_last_completed_min": 0, "focus_work_min": 25, "focus_break_min": 5, "focus_goal": 4,
          "scene_slots": [12, 0, 5, 2],
          "pet_energy": 82, "pet_until": 0.0,
          "focus_phase": "work", "focus_remaining_s": 1500, "focus_sessions": 0,
@@ -69,6 +69,8 @@ def focus_step() -> None:
             if STATE["focus_remaining_s"] <= 0:
                 if STATE["focus_phase"] == "work":
                     STATE["focus_sessions"] += 1
+                    STATE["focus_completed_total"] += 1
+                    STATE["focus_last_completed_min"] = STATE["focus_work_min"]
                     STATE["focus_phase"] = "break"
                     STATE["focus_remaining_s"] = STATE["focus_break_min"] * 60
                 else:
@@ -83,14 +85,14 @@ def change_focus(action: str) -> bool:
     if action in ("focus", "toggle"):
         STATE["focus_running"] = not STATE["focus_running"]
     elif action in ("focus_reset", "reset"):
-        STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=1500)
+        STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=STATE["focus_work_min"]*60)
     elif action in ("focus_skip", "skip"):
         if STATE["focus_phase"] == "work":
             STATE["focus_phase"] = "break"
-            STATE["focus_remaining_s"] = 300
+            STATE["focus_remaining_s"] = STATE["focus_break_min"]*60
         else:
             STATE["focus_phase"] = "work"
-            STATE["focus_remaining_s"] = 1500
+            STATE["focus_remaining_s"] = STATE["focus_work_min"]*60
     else:
         return False
     STATE["focus_mark"] = time.monotonic()
@@ -221,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
                                "focus_running": STATE["focus_running"],
                                "focus_phase": STATE["focus_phase"],
                                "focus_remaining_s": STATE["focus_remaining_s"],
-                               "focus_sessions": STATE["focus_sessions"],
+                               "focus_completed_total": STATE["focus_completed_total"], "focus_last_completed_min": STATE["focus_last_completed_min"], "focus_sessions": STATE["focus_sessions"],
                                "focus_work_min": STATE["focus_work_min"], "focus_break_min": STATE["focus_break_min"], "focus_goal": STATE["focus_goal"],
                                "focus_duration_s": STATE["focus_work_min" if STATE["focus_phase"] == "work" else "focus_break_min"] * 60,
                                "theme": STATE["theme"], "night_theme": STATE["theme"] in (1,3),

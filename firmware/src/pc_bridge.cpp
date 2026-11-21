@@ -928,6 +928,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("mood_v3");
   capabilities.add("event_timeline");
   capabilities.add("focus_sync");
+  capabilities.add("focus_completion_cursor_v1");
   capabilities.add("tft_themes");
   capabilities.add("scene_shortcuts_v1");
   capabilities.add("cat_behavior_v1");

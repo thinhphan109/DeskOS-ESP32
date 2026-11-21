@@ -66,3 +66,7 @@ Music position projection now shares duration/stale rules across TFT/Web/Windows
 ## v2.5 source checkpoint
 
 Native Windows Overview has bounded CPU/GPU/RAM history with explicit gaps, source isolation and DEMO labelling. See [PC Monitor](PC_MONITOR_V25.md).
+
+## v2.6 source checkpoint
+
+Observed Focus completions, local daily journal, opt-in break reminders and explicit Windows startup settings are implemented. See [Productivity Desk](PRODUCTIVITY_V26.md). Calendar account access and complete PC usage accounting remain separate integrations.

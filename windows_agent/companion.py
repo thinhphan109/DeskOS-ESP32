@@ -11,6 +11,7 @@ import json
 import time
 import threading
 import webbrowser
+import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal, QTimer, QUrl, QSignalBlocker
@@ -30,8 +31,10 @@ import device_config
 from scene_editor import SceneEditor
 from scene_layout import validate_layout
 from telemetry_chart import TelemetryChart
+from focus_journal import FocusJournal
+import startup
 import secret_store
-from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings
+from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings, user_config_path
 from state_sync import StateCursor, FocusDisplay, MediaDisplay
 from app_version import VERSION
 
@@ -156,6 +159,7 @@ class MainWindow(QMainWindow):
         self.state_cursor = StateCursor()
         self.focus_display = FocusDisplay()
         self.media_display = MediaDisplay()
+        self.focus_journal = None
         self._state_request_pending = False
         self._stream_seen_at = 0.0
         self._stream_supported = False
@@ -260,7 +264,7 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(250, self.start_agent)
             else:
                 self.update_from_worker({"type": "state", "message": "Nhập pairing key ở tab Thiết bị để bắt đầu"})
-        if self.settings.start_minimized:
+        if self.settings.start_minimized or "--minimized" in sys.argv:
             QTimer.singleShot(0, self.hide)
 
     def heading(self, root: QVBoxLayout, eyebrow: str, heading: str, sub: str) -> None:
@@ -477,6 +481,12 @@ class MainWindow(QMainWindow):
         save_plan = button("Lưu kế hoạch Focus")
         save_plan.clicked.connect(self.save_focus_plan)
         config_box.addWidget(save_plan)
+        self.focus_daily = text("Hôm nay · chờ phiên Focus hoàn tất khi Companion đang kết nối.", "smallLabel", wrap=True)
+        config_box.addWidget(self.focus_daily)
+        self.reminder_check = QCheckBox("Nhắc nghỉ khi hoàn thành Focus trên thiết bị")
+        self.reminder_check.setChecked(self.settings.break_reminders)
+        self.reminder_check.toggled.connect(self.set_break_reminders)
+        config_box.addWidget(self.reminder_check)
         box.addWidget(config)
         box.addStretch()
         self.stack.addWidget(widget)
@@ -502,6 +512,16 @@ class MainWindow(QMainWindow):
                          "Cần khởi động lại phiên truyền để nhận thay đổi.", "subtitle", wrap=True))
         box.addWidget(panel)
         backup, b = card()
+        self.startup_check = QCheckBox("Khởi động MèoDesk cùng Windows cho tài khoản này")
+        self.startup_check.setChecked(False if self.preview_mode else startup.is_enabled())
+        self.startup_check.setEnabled(sys.platform == "win32" and not self.preview_mode)
+        b.addWidget(self.startup_check)
+        startup_apply = button("Áp dụng khởi động cùng Windows")
+        startup_apply.setEnabled(sys.platform == "win32" and not self.preview_mode)
+        startup_apply.clicked.connect(self.apply_startup)
+        b.addWidget(startup_apply)
+        self.startup_hint = text("Chỉ thay đổi khi nhấn Áp dụng. Không cần quyền quản trị.", "subtitle", wrap=True)
+        b.addWidget(self.startup_hint)
         b.addWidget(text("Cấu hình thiết bị", "cardTitle"))
         row = QHBoxLayout()
         for caption, operation in (("Xuất cấu hình", self.export_device_config), ("Khôi phục từ file", self.restore_device_config)):
@@ -821,6 +841,35 @@ class MainWindow(QMainWindow):
             self.update_from_worker({"type": "device_state", "data": self._preview_state})
             return
         self.configuration_request("/api/v1/focus/config", {"work_min": work, "break_min": rest, "goal": goal})
+
+    def set_break_reminders(self, enabled) -> None:
+        self.settings.break_reminders = bool(enabled)
+        if not self.preview_mode:
+            try: write_settings(self.settings)
+            except OSError as error: self.focus_daily.setText(str(error))
+
+    def apply_startup(self) -> None:
+        if self.preview_mode: return
+        try:
+            startup.set_enabled(self.startup_check.isChecked())
+            self.startup_hint.setText("Đã bật khởi động cùng Windows." if self.startup_check.isChecked() else "Đã tắt khởi động cùng Windows.")
+        except OSError as error: self.startup_hint.setText(str(error))
+
+    def observe_focus_completion(self,data) -> None:
+        if self.preview_mode:
+            self.focus_daily.setText("DEMO · nhật ký Focus không được ghi."); return
+        if "focus_completed_total" not in data: return
+        try:
+            if self.focus_journal is None:
+                self.focus_journal=FocusJournal(user_config_path().with_name("focus.sqlite3"))
+            completed=self.focus_journal.observe(str(data.get("device_id") or self.settings.host),data)
+            count,minutes=self.focus_journal.summary()
+            goal=data.get("focus_goal",4)
+            self.focus_daily.setText(f"Hôm nay · {count}/{goal} phiên · {minutes} phút. Chỉ tính phiên quan sát được khi đang kết nối.")
+            if completed and self.settings.break_reminders and not data.get("quiet"):
+                self.tray.showMessage("MèoDesk · hoàn thành Focus","Đến giờ nghỉ. Đứng dậy và thư giãn một chút.",QSystemTrayIcon.MessageIcon.Information,8000)
+        except (OSError,sqlite3.Error) as error:
+            self.focus_daily.setText("Nhật ký tạm không khả dụng: "+str(error)[:100])
 
     def configuration_request(self, endpoint: str, payload=None, export_path=None) -> None:
         if self.preview_mode:
@@ -1175,6 +1224,7 @@ class MainWindow(QMainWindow):
             if self.worker and old_boot is not None and old_boot != self.state_cursor.boot:
                 self.worker.reset_device_session()
             self._stream_supported = "state_websocket_v1" in data.get("capabilities", [])
+            self.observe_focus_completion(data)
             scene_revision = (self.settings.host, data.get("state_boot_id"), data.get("scene_layout_revision"))
             if ("widget_scene_v1" in data.get("capabilities",[]) and scene_revision != self.scene_revision
                     and self.key and not self.scene_request_pending and time.monotonic() >= self.scene_retry_at):
@@ -1457,6 +1507,7 @@ class MainWindow(QMainWindow):
         if self.worker is not None:
             self.worker.stop()
         self.tray.hide()
+        if self.focus_journal is not None: self.focus_journal.close()
         QApplication.instance().quit()
 
 

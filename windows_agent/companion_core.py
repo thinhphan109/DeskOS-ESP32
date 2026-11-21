@@ -68,6 +68,7 @@ class Settings:
     gpu: str = "auto"
     media: bool = True
     start_minimized: bool = False
+    break_reminders: bool = False
 
 
 def user_config_path() -> Path:
@@ -83,6 +84,8 @@ def read_settings(path: Path | None = None) -> Settings:
         raw = json.loads(path.read_text(encoding="utf-8"))
         allowed = {key: raw[key] for key in Settings.__dataclass_fields__ if key in raw}
         result = Settings(**allowed)
+        if any(type(getattr(result,key)) is not bool for key in ("media","start_minimized","break_reminders")):
+            return Settings()
         if not 0.5 <= result.interval <= 5.0 or result.gpu not in ("auto", "nvidia", "lhm", "none"):
             return Settings()
         if result.host:

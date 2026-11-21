@@ -115,6 +115,8 @@ void applyFpsProfile(uint8_t profile) {
   catPacer.rebase(micros());
 }
 FocusTimer focusTimer;
+uint32_t focusCompletedTotal=0;
+uint8_t focusLastCompletedMin=0;
 bool colorTestActive = false;
 bool otaScreenActive = false;
 uint8_t themeChoice = 0; // 0 Cozy Day / 1 Midnight / 2 Auto by local NTP hour.
@@ -1285,6 +1287,8 @@ void webUiStatus(JsonDocument &doc) {
   doc["focus_phase"] = focusTimer.phase() == FocusTimer::WORK ? "work" : "break";
   doc["focus_remaining_s"] = focusTimer.remainingSeconds(millis());
   doc["focus_sessions"] = focusTimer.sessionsDone();
+  doc["focus_completed_total"]=focusCompletedTotal;
+  doc["focus_last_completed_min"]=focusLastCompletedMin;
   doc["focus_work_min"] = focusTimer.workMinutes();
   doc["focus_break_min"] = focusTimer.breakMinutes();
   doc["focus_goal"] = focusTimer.goal();
@@ -1424,10 +1428,12 @@ void loop() {
   }
   const FocusTimer::Transition focusEvent = focusTimer.tick(now);
   if (focusEvent != FocusTimer::NONE) {
-    if (focusEvent == FocusTimer::WORK_COMPLETED) petEngine.celebrate(now);
+    if (focusEvent == FocusTimer::WORK_COMPLETED) {
+      ++focusCompletedTotal; focusLastCompletedMin=focusTimer.workMinutes(); petEngine.celebrate(now);
+    }
     pcBridgeSetFocus(focusTimer.running() && focusTimer.phase() == FocusTimer::WORK);
     pcBridgePushEvent(focusEvent == FocusTimer::WORK_COMPLETED ? "focus_completed" : "break_completed",
-                      focusEvent == FocusTimer::WORK_COMPLETED ? "Focus complete! Take 5 minutes" :
+                      focusEvent == FocusTimer::WORK_COMPLETED ? "Focus complete! Time for a break" :
                                                                "Break complete! Back to focus",
                       1, 12000);
     if (currentPage == FOCUS_PAGE && !colorTestActive) drawCard();
