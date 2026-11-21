@@ -52,6 +52,7 @@ from media_monitor import MediaMonitor
 from single_instance import SingleInstance
 from update_panel import UpdatePanel
 import update_client
+import runtime_support
 
 
 
@@ -559,6 +560,13 @@ class MainWindow(QMainWindow):
         box.setContentsMargins(0, 0, 0, 0)
         self.heading(box, "05 / PREFERENCES", "Cài đặt",
                      "Các tuỳ chọn cho máy tính, thông báo và cấu hình thiết bị.")
+        support=Disclosure("Giới thiệu và hỗ trợ")
+        support.content.addWidget(text("mimi.desk · "+VERSION,"cardTitle"))
+        support.content.addWidget(text("Bản RC để đánh giá trước khi phát hành ổn định. Cấu hình được giữ khi nâng cấp.","subtitle",wrap=True))
+        self.support_hint=text("Xuất báo cáo dependency và tài nguyên; không kèm mã ghép nối, địa chỉ hoặc tên bài hát.","subtitle",wrap=True)
+        support.content.addWidget(self.support_hint)
+        export_support=button("Xuất chẩn đoán hỗ trợ");export_support.clicked.connect(self.export_support)
+        support.content.addWidget(export_support);box.addWidget(support)
         panel, p = card()
         self.media_check = QCheckBox("Bật Now Playing (Windows Media Controls)")
         self.media_check.setChecked(self.settings.media)
@@ -681,8 +689,21 @@ class MainWindow(QMainWindow):
                 self.bus.updates.emit({"operation":operation,"host":host,"error":str(error)[:240]})
         threading.Thread(target=work,name="MimiDeskUpdatePolicy",daemon=True).start()
 
+    def export_support(self) -> None:
+        path,_=QFileDialog.getSaveFileName(self,"Xuất chẩn đoán mimi.desk","mimi-desk-diagnostics.json","JSON (*.json)")
+        if not path:return
+        def work():
+            try:
+                report=runtime_support.diagnostics()
+                runtime_support.write_report(path,report)
+                self.bus.updates.emit({"operation":"support","message":"Đã xuất báo cáo chẩn đoán."})
+            except OSError:
+                self.bus.updates.emit({"operation":"support","message":"Chưa lưu được báo cáo. Chọn vị trí khác rồi thử lại."})
+        threading.Thread(target=work,name="MimiDeskSupport",daemon=True).start()
+
     def receive_update_reply(self,event: dict) -> None:
         if self._closing:return
+        if event.get("operation")=="support":self.support_hint.setText(event["message"]);return
         if event.get("operation")=="pairing":
             if event.get("host")!=self.host_edit.text().strip():return
             if event.get("error"):self.setup_hint.setText(event["error"])
@@ -1889,9 +1910,18 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
+    if "--preview-smoke" in sys.argv:
+        index=sys.argv.index("--preview-smoke")
+        if index+1>=len(sys.argv):return 2
+        return runtime_support.preview_smoke(sys.argv[index+1])
+    if "--self-check" in sys.argv:
+        index=sys.argv.index("--self-check")
+        if index+1>=len(sys.argv):return 2
+        return runtime_support.self_check(sys.argv[index+1])
     app = QApplication(sys.argv)
     app.setApplicationName("mimi.desk")
     app.setQuitOnLastWindowClosed(False)
+    runtime_support.configure_logging(user_config_path().parent)
     instance = SingleInstance(preview="--preview" in sys.argv)
     try:
         if not instance.acquire():

@@ -107,3 +107,12 @@ metadata/artwork were rendered in Qt with no device configured. See
 [desktop stability](DESKTOP_STABILITY_V212.md) for 37 focused checks and remaining
 acceptance work. Firmware source stays at v2.11-dev; server OTA implementation,
 updated EXE packaging and hardware deployment remain subsequent milestones.
+
+## v2.13–v2.15 RC completion
+
+The server OTA reader, versioned device policy, shared Flash lease, bridge migration
+and immutable local publisher are implemented. Web/Qt update controls, update journals,
+boot/device confirmation and Studio revision conflicts follow in v2.14. The v2.15 RC
+adds the packaged Windows build, per-user integration, diagnostics and staged release
+artifacts. See [RC handoff](RELEASE_CANDIDATE_V215.md). Real hosting, hardware
+acceptance and deployment remain deferred; these milestones do not imply stable status.

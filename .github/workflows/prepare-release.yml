@@ -1,0 +1,64 @@
+name: Prepare release for review
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [preview, stable]
+        default: preview
+      sequence:
+        description: Monotonically increasing release sequence
+        required: true
+      base_url:
+        description: Reviewed HTTPS origin for static channels and releases (no trailing slash)
+        required: true
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install platformio
+      - run: pio run -d firmware -e mimi-public
+      - name: Stage immutable release (no publishing)
+        env:
+          UPDATE_CHANNEL: ${{ inputs.channel }}
+          UPDATE_SEQUENCE: ${{ inputs.sequence }}
+          UPDATE_BASE_URL: ${{ inputs.base_url }}
+        run: |
+          python - <<'PY'
+          import os,re,sys
+          from pathlib import Path
+          sys.path.insert(0,'firmware/tools')
+          from publish_update import stage
+          version=re.search(r'MEO_VERSION "([^"]+)"',Path('firmware/src/app_version.h').read_text()).group(1)
+          channel=os.environ['UPDATE_CHANNEL']
+          release_id=channel+'-'+version+'-'+os.environ['UPDATE_SEQUENCE']
+          base=os.environ['UPDATE_BASE_URL'].rstrip('/')
+          if not base.startswith('https://'):
+              raise SystemExit('Release base URL must use HTTPS')
+          stage('firmware/.pio/build/mimi-public/firmware.bin','dist/server',version=version,channel=channel,
+                sequence=int(os.environ['UPDATE_SEQUENCE']),release_id=release_id,
+                artifact_url=base+'/releases/'+release_id+'/firmware.bin')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mimi.desk-server-staging
+          path: dist/server/
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: .\packaging\windows\build.ps1
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mimi.desk-windows-review
+          path: dist/mimi.desk-*-Windows-x64.zip

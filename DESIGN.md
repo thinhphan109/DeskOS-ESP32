@@ -37,4 +37,8 @@ Controls have focus states, native labels and keyboard operation. Authored SVG n
 
 The Web overview, Studio and a 390px breakpoint were visually inspected in the local mock. Native Overview and Music were visually inspected in DEMO. Changes to content-height policy also cover the Device layout. Use focused GUI construction/state checks, embedded-JS syntax/shared-state checks and a firmware build; do not default to the full suite per edit.
 
-Server OTA and firmware deployment are separate from this visual release. See `docs/SERVER_OTA_PROPOSAL.md`.
+Server OTA controls now share the device-owned revision/policy and update state. Keep
+manual file tools inside disclosures; show measured byte progress only for download,
+and use waiting states for checks/reboot. Preserve dirty drafts on remote changes.
+Packaged Windows diagnostics and About live under Settings. Hardware deployment and
+hosting remain separate from the RC; see `docs/RELEASE_CANDIDATE_V215.md`.

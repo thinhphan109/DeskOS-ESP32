@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "version": "2.15.0-rc.1",
+  "artifacts": [
+    {
+      "path": "release/mimi_desk_v215rc1_public_firmware.bin",
+      "flavor": "public",
+      "version": "2.15.0-rc.1",
+      "size": 2707808,
+      "sha256": "9286156b46020b9b41f0e777d63c29bf4874c560f93b4b9c2ec86d685295dbfd"
+    },
+    {
+      "path": "release/mimi_desk_v215rc1_private_bridge.bin",
+      "flavor": "private_bridge",
+      "version": "2.15.0-rc.1",
+      "size": 2707856,
+      "sha256": "57f364f274a79b3a643c86f63da5d5e332a2288f933dab2258f2cfa3ae5afcca"
+    },
+    {
+      "path": "dist/mimi.desk-2.15.0-rc.1-Windows-x64.zip",
+      "flavor": "windows-x64",
+      "version": "2.15.0-rc.1",
+      "size": 73841566,
+      "sha256": "cdaeb73176a6300fbc8226ad84d63ef78baf9bdea6bb16b1ffe4bcf3dfff896d"
+    }
+  ],
+  "python_focused_tests": 43,
+  "native_checks": [
+    "update_contract",
+    "ota_manager",
+    "cat_pack"
+  ],
+  "javascript_checks": [
+    "update",
+    "boot",
+    "sync",
+    "scene",
+    "rules"
+  ],
+  "packaged_self_check": true,
+  "packaged_preview_cases": 21,
+  "extra_scale_factors": [
+    1,
+    1.5
+  ],
+  "staging_http_hash_verified": true,
+  "private_value_checks": 2,
+  "deployed": false,
+  "hosting_configured": false,
+  "remaining_acceptance": [
+    "ESP32 TLS/heap/FPS and TFT",
+    "controlled OTA/rollback/power-loss on board",
+    "DHCP rediscovery on board",
+    "Windows clean machine"
+  ],
+  "staging_sequence": 215002
+}

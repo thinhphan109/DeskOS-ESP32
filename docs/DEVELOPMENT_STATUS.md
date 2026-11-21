@@ -1,6 +1,6 @@
 # Tình hình phát triển mimi.desk
 
-Cập nhật ngày 21/11/2026. Phần lõi firmware đã được triển khai đến v2.11-dev, Windows Companion đến v2.12-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
+Cập nhật ngày 21/11/2026. Firmware và Windows Companion đã đến **2.15.0-rc.1**, sẵn để xem xét trước deploy. Các bản nguồn được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính. Xem [bàn giao RC](RELEASE_CANDIDATE_V215.md) và [tracker](COMPLETION_TRACKER.md).
 
 | Mốc | Đã có trong mã nguồn | Giới hạn còn lại |
 |---|---|---|
@@ -21,6 +21,7 @@ Cập nhật ngày 21/11/2026. Phần lõi firmware đã được triển khai �
 | Windows v2.12 | Một phiên GUI, nhạc cục bộ độc lập với ESP32, tìm phiên media, backoff và tìm lại đúng device ID | Đã đọc Spotify/ảnh bìa thật; còn nghiệm thu đổi IP bo và EXE trên Windows sạch. Firmware vẫn v2.11-dev |
 | Firmware v2.13 | Reader OTA server, chính sách revision, manifest/tương thích, lease OTA/CatPack, NVS cầu nối và publisher | Hai build đã qua; chưa deploy, thử mạng/TLS hoặc rollback trên bo |
 | v2.14 | Bảng update Web/Qt, journal OTA, xác minh device/boot, AP pairing và revision Studio/rules | Kiểm tra phần mềm và render DEMO đã qua; chưa nạp bo |
+| v2.15 RC | EXE/ZIP Windows, icon/version, cài/nâng cấp chủ động, chẩn đoán, staging và receipt | EXE đọc Spotify thật, 21 tình huống layout và hai firmware build đã qua; Windows sạch/phần cứng còn chờ |
 
 ## Bằng chứng kiểm thử
 
@@ -46,4 +47,4 @@ Phần v3.0 còn lại gồm điều khiển nhiều thiết bị đồng thời
 
 [Đợt desktop v2.12](DESKTOP_STABILITY_V212.md) đã hoàn thành phần vận hành app/nhạc với 37 kiểm thử tập trung và chạy provider trong Qt thật. Môi trường phát triển đã có WinRT; thiếu dependency này là nguyên nhân bổ sung khiến bản thật trước đó không đọc Spotify. Chưa dựng OTA server hoặc deploy firmware.
 
-[Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) đề xuất tên MiuDesk/MiuDesk Studio, nội dung giao diện, điều hướng, vòng đời kết nối và cải tiến cập nhật. Tên hiển thị mimi.desk đã được chốt và áp dụng. Định danh kỹ thuật cũ giữ để tương thích; bản dev chưa được gắn nhãn stable. Xem [phạm vi redesign](REDESIGN_V211.md) và [đề xuất OTA server](SERVER_OTA_PROPOSAL.md).
+[Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) ghi hướng nội dung, điều hướng và vòng đời kết nối/cập nhật. Tên mimi.desk đã được chốt và áp dụng. Định danh kỹ thuật cũ giữ để tương thích; RC chưa được gắn nhãn stable. OTA server đã có reader/API/UI/publisher, nhưng hosting và deploy thực tế vẫn chờ thảo luận. Xem [bàn giao RC](RELEASE_CANDIDATE_V215.md).

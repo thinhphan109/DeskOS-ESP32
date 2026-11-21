@@ -20,7 +20,7 @@ Thiết bị trong mạng Wi-Fi nội bộ; sử dụng hàng ngày, thao tác n
 
 ## Capabilities and Constraints
 
-Có telemetry, nhạc SMTC, Focus, cảnh/widget, theme, rules, CatPack và OTA A/B thủ công. Giữ định danh giao thức, NVS và cấu hình cũ. Chưa triển khai pull OTA/server hoặc đổi bootloader. OTA server cần hai chế độ do người dùng chọn: kiểm tra rồi bấm cập nhật, hoặc tự cập nhật bản tương thích mới nhất; cần xử lý nhiều release nối tiếp.
+Có telemetry, nhạc SMTC, Focus, cảnh/widget, theme, rules, CatPack, OTA A/B thủ công và reader OTA server. Giữ định danh giao thức, NVS và cấu hình cũ; không đổi bootloader/phân vùng. OTA server có hai chế độ đã chọn: kiểm tra rồi bấm cập nhật, hoặc tự cập nhật bản tương thích mới nhất, với một lượt đang chạy và một bản chờ mới nhất. Bản 2.15.0-rc.1 đã có artifact và staging cục bộ; hosting thật, nạp bo và nghiệm thu phần cứng còn chờ. Không tự bật Auto khi chưa cấu hình server.
 
 ## Brand Commitments
 

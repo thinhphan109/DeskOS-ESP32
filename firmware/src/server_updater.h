@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <atomic>
 
 class ServerUpdater {
  public:
@@ -49,12 +50,14 @@ class ServerUpdater {
   uint32_t lastCheckEpoch_ = 0, highestSequence_ = 0, failures_ = 0;
   bool automatic_ = false, deferFocus_ = true, taskRunning_ = false, downloading_ = false;
   bool imageTask_ = false, manualRequested_ = false, bootSettled_ = false;
-  volatile bool cancelTask_ = false;
+  uint32_t taskPolicyRevision_ = 0;
+  std::atomic<bool> cancelTask_{false};
   Phase phase_ = Idle;
   Release pending_{}, active_{};
   String manifest_, taskUrl_, message_ = "idle", seenId_, seenFingerprint_, attemptId_, bootTarget_;
   String commands_[8], operations_[8];
   uint8_t commandCursor_ = 0;
   uint32_t attemptCount_ = 0;
+  int lastProgress_ = -1;
 };
 extern ServerUpdater serverUpdater;

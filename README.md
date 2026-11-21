@@ -4,7 +4,7 @@ Public Git checkouts exclude private configuration and firmware binaries.
 Start with [SOURCE_CHECKOUT.md](docs/SOURCE_CHECKOUT.md); private-ZIP notes
 below describe the original archive, not files published in this repository.
 
-The current source milestone is **2.14.0-dev**: Scene Studio, shared state,
+The current source milestone is **2.15.0-rc.1**: Scene Studio, shared state,
 Cat Life, dashboard themes, productivity, bounded automation, integration feeds,
 an expanded TFT Music scene with embedded Vietnamese glyphs, and a redesigned Web/Windows workspace.
 See [development status](docs/DEVELOPMENT_STATUS.md) for implemented scope,
@@ -16,6 +16,9 @@ activation and bounded reconnect. Firmware **2.13.0-dev** added the
 See [desktop stability](docs/DESKTOP_STABILITY_V212.md) for scope and focused checks.
 The [v2.14 update experience](docs/UPDATE_EXPERIENCE_V214.md) adds Web/Windows
 policy controls, interrupted-update confirmation and Studio draft conflict handling.
+The [RC handoff](docs/RELEASE_CANDIDATE_V215.md) covers the packaged Windows app,
+private bridge/public firmware artifacts, staging and remaining physical acceptance.
+No firmware was flashed and no automatic update policy was enabled in this pass.
 See [the desktop and OTA production plan](docs/PRODUCTION_PLAN.md) for proposed naming,
 product messages, update flow and acceptance gates. The display brand is now **mimi.desk**;
 legacy device/configuration identifiers remain compatible. [Server OTA](docs/SERVER_OTA_PROPOSAL.md) is a proposal, not enabled firmware behavior.

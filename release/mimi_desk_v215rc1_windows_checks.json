@@ -1,0 +1,174 @@
+{
+  "self_check": {
+    "schema": 1,
+    "app_version": "2.15.0-rc.1",
+    "python_version": "3.13.14",
+    "platform": "win32",
+    "architecture": "AMD64",
+    "qt_version": "6.12.0",
+    "frozen": true,
+    "dependencies": {
+      "psutil": "available",
+      "PIL.Image": "available",
+      "PySide6.QtSvg": "available",
+      "keyring.backends.Windows": "available",
+      "winrt.windows.media.control": "available",
+      "winrt.windows.media": "available",
+      "winrt.windows.storage.streams": "available"
+    },
+    "assets": {
+      "healthy.png": true,
+      "paused.png": true,
+      "music.png": true,
+      "shutdown.png": true
+    },
+    "ok": true,
+    "media": {
+      "available": true,
+      "playing": true,
+      "reason": null,
+      "artwork_bytes": 8192
+    },
+    "media_check_finished": true,
+    "qt_render": {
+      "asset_loaded": true,
+      "svg_loaded": true
+    }
+  },
+  "preview_smoke": {
+    "schema": 1,
+    "version": "2.15.0-rc.1",
+    "frozen": true,
+    "preview": true,
+    "device_worker_started": false,
+    "sizes": [
+      {
+        "width": 850,
+        "height": 560,
+        "page": 0,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 1,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 2,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 3,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 4,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 5,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 850,
+        "height": 560,
+        "page": 6,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 0,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 1,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 2,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 3,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 4,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 5,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1120,
+        "height": 760,
+        "page": 6,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 0,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 1,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 2,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 3,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 4,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 5,
+        "horizontal_scroll": 0
+      },
+      {
+        "width": 1440,
+        "height": 960,
+        "page": 6,
+        "horizontal_scroll": 0
+      }
+    ],
+    "ok": true
+  }
+}

@@ -1,5 +1,7 @@
 # Kế hoạch hoàn thiện ứng dụng desktop và OTA
 
+**Tiến độ mới nhất:** các mốc đến v2.15.0-rc.1 đã có source/artifact, UI cập nhật và gói EXE. Xem [bàn giao RC](RELEASE_CANDIDATE_V215.md) để phân biệt phần đã làm với nghiệm thu Windows sạch/phần cứng/hosting còn chờ. Bảng bên dưới giữ tiêu chí toàn đợt; không có nghĩa mọi dòng vẫn chưa được triển khai.
+
 Cập nhật ngày 21/11/2026. Mục tiêu của đợt kế tiếp là hoàn thiện trải nghiệm sử dụng, kết nối và cập nhật. Các mục đã làm được ghi rõ theo phiên bản. Chưa thay bootloader hoặc triển khai firmware lên thiết bị.
 
 ## Tên sản phẩm đã chốt

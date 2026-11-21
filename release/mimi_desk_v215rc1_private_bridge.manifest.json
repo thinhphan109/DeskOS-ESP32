@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "board": "meodesk-esp32s3-n16r8",
+  "firmware_version": "2.15.0-rc.1",
+  "filename": "mimi_desk_v215rc1_private_bridge.bin",
+  "size": 2707856,
+  "sha256": "57f364f274a79b3a643c86f63da5d5e332a2288f933dab2258f2cfa3ae5afcca",
+  "signature": null,
+  "transport": "local-pairing-http"
+}

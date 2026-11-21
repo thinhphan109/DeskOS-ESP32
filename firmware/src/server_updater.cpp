@@ -192,17 +192,19 @@ bool ServerUpdater::acceptManifest(String &error) {
   if(notes.length()>380) {unsigned end=380;while(end && (static_cast<uint8_t>(notes[end])&0xc0)==0x80)--end;notes=notes.substring(0,end);}
   strlcpy(release.notes,notes.c_str(),sizeof(release.notes));
   pending_=release; // one coalesced slot, active_ is never edited by this path
-  if(version<=0){phase_=Idle;message_="up_to_date";manualRequested_=false;}
+  if(manualRequested_){phase_=Waiting;message_="waiting_for_device";}
+  else if(version<=0){phase_=Idle;message_="up_to_date";}
   else {phase_=Available;message_="release_available";}
   return true;
 }
 bool ServerUpdater::launch(bool image) {
   if(taskRunning_ || !queue_ || url_.isEmpty())return false;
   imageTask_=image;cancelTask_=false;manifest_="";taskUrl_=image?String(active_.url):url_;
+  taskPolicyRevision_=revision_;
   taskRunning_=true;
   if(!image){phase_=Checking;message_="checking";}
   TaskHandle_t handle=nullptr;
-  if(xTaskCreate(taskEntry,"mimiUpdate",8192,this,1,&handle)!=pdPASS) {taskRunning_=false;return false;}
+  if(xTaskCreate(taskEntry,"mimiUpdate",12288,this,1,&handle)!=pdPASS) {taskRunning_=false;return false;}
   return true;
 }
 void ServerUpdater::taskEntry(void *self) {static_cast<ServerUpdater*>(self)->fetch();vTaskDelete(nullptr);}
@@ -275,7 +277,7 @@ bool ServerUpdater::beginDownload(String &error) {
   ++attemptCount_;prefs_.putString("attempt_id",attemptId_);prefs_.putUInt("attempts",attemptCount_);
   bootTarget_=active_.version;
   if(prefs_.putString("boot_target",bootTarget_)!=bootTarget_.length()){error="update_storage_unavailable";return false;}
-  if(progress_)progress_(0);
+  lastProgress_=0;if(progress_)progress_(0);
   if(!meoOta.begin(active_.size,active_.sha,MeoOtaManager::BOARD_ID)) {
     if(progress_)progress_(-1);
     error="ota_begin_failed";return false;
@@ -300,7 +302,10 @@ void ServerUpdater::loop(bool connected,bool focusRunning) {
     if(packet.kind==0) {
       if(imageTask_) {
         if(downloading_ && !meoOta.append(packet.data,packet.size))fail("image_write_failed");
-        if(downloading_ && progress_)progress_(100ULL*meoOta.written()/active_.size);
+        if(downloading_ && progress_) {
+          const int percent=100ULL*meoOta.written()/active_.size;
+          if(percent!=lastProgress_){lastProgress_=percent;progress_(percent);}
+        }
       } else if(phase_==Checking && manifest_.length()+packet.size<=8192) {
         manifest_.concat(reinterpret_cast<char*>(packet.data),packet.size);
       }
@@ -310,6 +315,9 @@ void ServerUpdater::loop(bool connected,bool focusRunning) {
       else if(imageTask_ && downloading_) {
         if(!meoOta.finish())fail("image_verification_failed");
         else {downloading_=false;phase_=Rebooting;message_="verified_rebooting";if(progress_)progress_(100);if(reboot_)reboot_();}
+      } else if(!imageTask_ && taskPolicyRevision_!=revision_) {
+        // An in-flight old channel must never populate the newly saved policy.
+        if(!busy()){phase_=Idle;message_="idle";}nextCheck_=now+1000U;
       } else if(!imageTask_ && phase_==Checking) {
         String error;lastCheckEpoch_=time(nullptr);nextCheck_=now+interval_*1000U+(esp_random()%5000U);
         if(!acceptManifest(error))fail(error.c_str());else failures_=0;
