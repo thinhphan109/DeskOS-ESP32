@@ -57,6 +57,19 @@ class CompanionCoreTests(unittest.TestCase):
         self.assertTrue(data["title"].endswith("Mèo") or len(data["title"]) > 0)
         self.assertLessEqual(len(json.dumps(data, ensure_ascii=False).encode()), 512)
 
+    def test_media_normalizes_decomposed_vietnamese_and_controls(self):
+        import unicodedata
+        title="Đừng làm trái tim anh đau"
+        data=companion_core.wire_media({"title":unicodedata.normalize("NFD",title)+"\n\x00",
+                                       "artist":"Đỗ Mỹ Linh\t", "available":True})
+        self.assertEqual(data["title"],title)
+        self.assertEqual(data["artist"],"Đỗ Mỹ Linh")
+        self.assertTrue(unicodedata.is_normalized("NFC",data["title"]))
+        data=companion_core.wire_media({"title":"ữ"*100,"artist":"ộ"*100})
+        self.assertLessEqual(len(data["title"].encode()),64)
+        self.assertLessEqual(len(data["artist"].encode()),48)
+        self.assertNotIn("\ufffd",data["title"])
+
     def test_missing_media_never_fabricates_song(self):
         no = media_provider.unavailable()
         self.assertFalse(no["available"])

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import unicodedata
 import os
 import threading
 import time
@@ -32,7 +33,10 @@ def media_artwork_id(snapshot: dict) -> str:
 def wire_media(snapshot: dict) -> dict:
     """Strict schema-1 envelope: safe for the ESP32's 512-byte input limit."""
     def short(value: Any, n: int) -> str:
-        return str(value or "").encode("utf-8")[:n].decode("utf-8", "ignore")
+        clean = unicodedata.normalize("NFC", str(value or ""))
+        clean = " ".join("".join(c if unicodedata.category(c) not in {"Cc", "Cs"}
+                                  else " " for c in clean).split())
+        return clean.encode("utf-8")[:n].decode("utf-8", "ignore")
 
     return {"schema": 1, "available": bool(snapshot.get("available")),
             "playing": bool(snapshot.get("playing")),

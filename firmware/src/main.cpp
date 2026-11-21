@@ -14,6 +14,7 @@
 #include "core/widget_contract.h"
 #include "core/theme_palette.h"
 #include "render/widget_renderer.h"
+#include "render/music_renderer.h"
 
 static PerformanceLab performanceLab;
 #include "ota_manager.h"
@@ -71,6 +72,9 @@ static constexpr uint32_t STATS_INTERVAL_MS = 5000;
 
 DeskDisplay tft;
 lgfx::LGFX_Sprite cardSprite(&tft);
+lgfx::LGFX_Sprite musicSprite(&tft);
+bool musicBuffered=false, musicDirty=true;
+uint32_t musicSignature=0;
 // Both LGFX_Device (hardware) and LGFX_Sprite (offscreen canvas)
 // inherit from LovyanGFX. Keep the drawing target at their common base type.
 lgfx::LovyanGFX *surface = &tft;
@@ -379,8 +383,16 @@ bool customSceneHasDemo() {
 }
 
 void drawHeaderStatus() {
+  if(currentPage==MUSIC_PAGE) {
+    const auto *event=pcBridgeActiveEvent();
+    if(event && event->priority>=EventEngine::CRITICAL) {
+      tft.fillRoundRect(244,9,65,25,12,CORAL);
+      label("ALERT",256,17,rgb(43,49,69));
+      return;
+    }
+  }
   const bool live = pageHasRealData(currentPage);
-  const bool waiting = (currentPage==CUSTOM_PAGE && !live && !customSceneHasDemo()) || ((currentPage == PC_PAGE || currentPage == HEALTH_PAGE ||
+  const bool waiting = (currentPage==MUSIC_PAGE && !live) || (currentPage==CUSTOM_PAGE && !live && !customSceneHasDemo()) || ((currentPage == PC_PAGE || currentPage == HEALTH_PAGE ||
                         currentPage == TRENDS_PAGE || currentPage == HOME_PAGE ||
                         currentPage == PC_NETWORK_PAGE)
                        && !pcTelemetryFresh());
@@ -399,10 +411,15 @@ void drawPageFrame() {
   label(String(nightPalette ? "NIGHT / " : "DESK / ") + MEO_VERSION, 100, 18, MUTED);
   drawHeaderStatus();
 
-  label(pageName(currentPage), 14, 45, INK, 2);
-  tft.fillRoundRect(CARD_X + 3, CARD_Y + 4,
-                    CARD_W, CARD_H, 15, SHADOW);
-  tft.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 15, PAPER);
+  musicDirty=true;
+  if(currentPage==MUSIC_PAGE) {
+    tft.fillRoundRect(8,43,304,160,12,PAPER);
+  } else {
+    label(pageName(currentPage), 14, 45, INK, 2);
+    tft.fillRoundRect(CARD_X + 3, CARD_Y + 4,
+                      CARD_W, CARD_H, 15, SHADOW);
+    tft.fillRoundRect(CARD_X, CARD_Y, CARD_W, CARD_H, 15, PAPER);
+  }
 
   const int positions[] = {11, 85, 159, 233};
   for (int i = 0; i < 4; ++i) {
@@ -414,6 +431,7 @@ void drawPageFrame() {
 }
 
 void drawDeskNotice(uint32_t now) {
+  if(currentPage==MUSIC_PAGE) { drawHeaderStatus(); return; } // Keep critical badge, leave content clear.
   (void)now;
   const auto *event=pcBridgeActiveEvent();
   if(event && healthSettings.quiet && event->priority<EventEngine::CRITICAL) event=nullptr;
@@ -505,6 +523,7 @@ MotionDirector::Context liveMotionContext(uint32_t now) {
 }
 
 void drawAnimatedCat(uint32_t now) {
+  if(currentPage==MUSIC_PAGE) return;
   const uint32_t labStarted = performanceLab.enabled() ? micros() : 0;
   if (!catDmaReady) {
     // Safe fallback if DMA-capable memory cannot be allocated.
@@ -564,7 +583,55 @@ void drawAnimatedCat(uint32_t now) {
   if (performanceLab.enabled()) performanceLab.add(PerformanceLab::CAT_WALL, micros() - labStarted);
 }
 
+void drawMusicPage() {
+  const uint32_t started=performanceLab.enabled() ? micros() : 0;
+  const uint32_t now=millis();
+  const bool valid=pcMedia.fresh(now) && pcMedia.available;
+  const bool art=valid && pcBridgeArtworkReady();
+  const uint16_t secondary=mix565(INK,PAPER,60);
+  uint32_t signature=2166136261UL;
+  const auto hash=[&signature](const char *value) {
+    while(*value) { signature^=static_cast<uint8_t>(*value++); signature*=16777619UL; }
+  };
+  hash(valid ? pcMedia.title : ""); hash("|");
+  hash(valid ? pcMedia.artist : ""); hash("|");
+  hash(art ? pcMedia.artworkId : "");
+  signature^=(valid ? 1UL : 0UL)|(art ? 2UL : 0UL);
+  if(musicDirty || signature!=musicSignature) {
+    musicDirty=false; musicSignature=signature;
+    lgfx::LovyanGFX &canvas=musicBuffered ? static_cast<lgfx::LovyanGFX &>(musicSprite) : tft;
+    const int ox=musicBuffered ? MusicView::X : 0, oy=musicBuffered ? MusicView::Y : 0;
+    if(musicBuffered) musicSprite.fillScreen(BG);
+    canvas.fillRoundRect(8-ox,43-oy,304,160,12,PAPER);
+    MusicView::cover(canvas,art ? pcBridgeArtworkPixels() : nullptr,16-ox,49-oy,MINT,TEAL);
+    MusicView::text(canvas,valid ? (pcMedia.title[0] ? pcMedia.title : "Không có tên bài") : "Chưa phát nhạc",
+                    148-ox,67-oy,156,3,MusicFonts::title,INK);
+    MusicView::text(canvas,valid ? (pcMedia.artist[0] ? pcMedia.artist : "Không rõ nghệ sĩ") : "Mở Spotify trên PC",
+                    148-ox,145-oy,156,2,MusicFonts::body,secondary);
+    if(musicBuffered) {
+      musicSprite.pushSprite(8,43); tft.waitDMA();
+      performanceLab.pixels(MusicView::W,MusicView::META_H);
+    }
+  }
+  // Small independent update: the 120px artwork and title stay untouched.
+  tft.fillRect(16,175,288,26,PAPER);
+  surface=&tft; surfaceOriginX=surfaceOriginY=0;
+  const uint32_t elapsed=valid ? pcMedia.positionAt(now) : 0;
+  const uint32_t duration=valid ? pcMedia.durationMs : 0;
+  bar(16,176,288,5,duration ? static_cast<int>(100ULL*elapsed/duration) : 0,TRACK,TEAL);
+  char stamp[28];
+  snprintf(stamp,sizeof(stamp),"%02lu:%02lu / %02lu:%02lu",
+           static_cast<unsigned long>(elapsed/60000UL),static_cast<unsigned long>(elapsed/1000UL%60),
+           static_cast<unsigned long>(duration/60000UL),static_cast<unsigned long>(duration/1000UL%60));
+  label(valid && duration ? stamp : "--:-- / --:--",16,189,secondary);
+  MusicView::text(tft,valid ? (pcMedia.playing ? "Đang phát" : "Tạm dừng") : "Chưa kết nối",
+                  188,197,116,1,MusicFonts::body,valid ? TEAL : MUTED);
+  lastCardMs=now;
+  if(performanceLab.enabled()) performanceLab.add(PerformanceLab::CARD_WALL,micros()-started);
+}
+
 void drawCard() {
+  if(currentPage==MUSIC_PAGE) { drawMusicPage(); return; }
   const uint32_t labStarted = performanceLab.enabled() ? micros() : 0;
   if (cardBuffered) {
     cardSprite.fillScreen(BG);
@@ -817,48 +884,6 @@ void drawCard() {
       label("UP " + String(seconds) + "s", 19, 171, MUTED);
       break;
     }
-    case MUSIC_PAGE: {
-      const bool valid = pcMedia.fresh(nowMs) && pcMedia.available;
-      const bool art = valid && pcBridgeArtworkReady();
-      label(valid ? (pcMedia.playing ? "NOW PLAYING" : "PAUSED") : "NO MEDIA SESSION",
-            19, 87, valid ? TEAL : MUTED);
-      if (valid) {
-        String track(pcMedia.title);
-        if (!track.length()) track = "Untitled track";
-        String artist(pcMedia.artist);
-        if (art) {
-          // The album tile occupies x19..82; two 10-char title lines fit next
-          // to it. Actual pixels are pasted *after* the buffered card.
-          label(track.substring(0, 10), 93, 116, INK);
-          if (track.length() > 10) label(track.substring(10, 20), 93, 128, INK);
-          label(artist.length() ? artist.substring(0, 11) : "Unknown", 93, 150, MUTED);
-        } else {
-          if (track.length() > 21) track = track.substring(0, 19) + "..";
-          label(track, 19, track.length() > 11 ? 115 : 110, INK,
-                track.length() > 11 ? 1 : 2);
-          if (artist.length() > 21) artist = artist.substring(0, 20) + "...";
-          label(artist.length() ? artist : "Unknown artist", 19, 143, MUTED);
-        }
-        const uint32_t duration = pcMedia.durationMs;
-        const uint32_t elapsed = pcMedia.positionAt(nowMs);
-        // Keep the 64x64 cover (y=107..170) clear of the timeline.
-        // In the text-only layout we retain the denser original spacing.
-        const int timelineY = art ? 174 : 158;
-        const int stampY = art ? 185 : 180;
-        bar(19, timelineY, 135, 7, duration ? (int)(100ULL * min(elapsed, duration) / duration) : 0,
-            TRACK, CORAL);
-        char stamp[24];
-        snprintf(stamp, sizeof(stamp), "%02lu:%02lu / %02lu:%02lu",
-                 (unsigned long)(elapsed / 60000UL), (unsigned long)((elapsed / 1000UL) % 60),
-                 (unsigned long)(duration / 60000UL), (unsigned long)((duration / 1000UL) % 60));
-        label(duration ? stamp : "TIME N/A", 19, stampY, MUTED);
-      } else {
-        label("Nothing playing", 19, 123, INK, 2);
-        label("OPEN A MUSIC PLAYER", 19, 154, MUTED);
-        label("REAL WINDOWS MEDIA", 19, 179, TEAL);
-      }
-      break;
-    }
     case PRINTER_PAGE: {
       const int progress = 55 + (seconds / 6) % 45;
       ring(90, 128, 39, progress);
@@ -906,13 +931,6 @@ void drawCard() {
     performanceLab.pixels(CARD_W, CARD_H);
     tft.waitDMA(); // Safe to modify cardSprite on the next update.
   }
-  if (currentPage == MUSIC_PAGE && pcBridgeArtworkReady()) {
-    const uint16_t *pixels = pcBridgeArtworkPixels();
-    if (pixels) {
-      tft.pushImage(19, 107, 64, 64, reinterpret_cast<const lgfx::rgb565_t *>(pixels));
-      performanceLab.pixels(64, 64);
-    }
-  }
   lastCardMs = nowMs;
   if (performanceLab.enabled()) performanceLab.add(PerformanceLab::CARD_WALL, micros() - labStarted);
 }
@@ -935,7 +953,9 @@ void setPage(Page page) {
   pageStartedMs = millis();
   drawPageFrame();
   drawCard();
-  if (catDmaReady) {
+  if(currentPage==MUSIC_PAGE) {
+    // Wide Music replaces the cat only on this page.
+  } else if (catDmaReady) {
     drawAnimatedCat(millis());
   } else {
     tft.pushImage(CAT_X, CAT_Y + 3, CAT_W, CAT_H,
@@ -1442,6 +1462,12 @@ void setup() {
                                  "[MEM] Card sprite direct-draw fallback.");
   }
 
+  // Optional large Music metadata canvas lives in PSRAM only.
+  if(psramAvailable) {
+    musicSprite.setPsram(true); musicSprite.setColorDepth(16);
+    musicBuffered=musicSprite.createSprite(MusicView::W,MusicView::META_H)!=nullptr;
+  }
+
   // Load a committed and checksum-verified cat pack once at boot. The
   // 663 KiB RGB565 atlas lives in PSRAM; DMA strips stay internal RAM.
   catPack.initialize();
@@ -1532,7 +1558,9 @@ void loop() {
     }
     const bool moodChanged = petEngine.tick(context, now);
     if (moodChanged) {
-      if (!catDmaReady) {
+      if(currentPage==MUSIC_PAGE) {
+        // Music has no cat region.
+      } else if (!catDmaReady) {
         // Static fallback still reflects urgent mood changes without DMA.
         tft.pushImage(CAT_X, CAT_Y + 3, CAT_W, CAT_H,
                       reinterpret_cast<const lgfx::rgb565_t *>(catForPage(currentPage)));
@@ -1565,7 +1593,7 @@ void loop() {
   // sample a *fresh* clock now so an earlier timestamp never underflows
   // against drawCard()'s newer lastCardMs and causes a duplicate repaint.
   const uint32_t renderNow = millis();
-  if (catMotion && catDmaReady && catPacer.due(micros())) {
+  if (currentPage!=MUSIC_PAGE && catMotion && catDmaReady && catPacer.due(micros())) {
     const uint32_t renderStarted = micros();
     drawAnimatedCat(renderNow);
     const uint32_t renderTime = micros() - renderStarted;
@@ -1577,7 +1605,7 @@ void loop() {
   const WidgetSpec cardWidget{{CARD_X, CARD_Y, CARD_W, CARD_H}, cardIntervalMs(currentPage), clockPage};
   constexpr RenderSurfaceInfo renderSurface{320, 240, 16, true};
   if (renderSurface.accepts(cardWidget.region) && CardRefresh::due(cardNow, lastCardMs, cardWidget.refreshMs,
-                       cardWidget.alignSeconds, catMotion && catDmaReady, catPacer.untilNextUs(micros()))) {
+                       cardWidget.alignSeconds, currentPage!=MUSIC_PAGE && catMotion && catDmaReady, catPacer.untilNextUs(micros()))) {
       drawCard();
       if (currentPage == CLOCK_PAGE || currentPage == PC_PAGE || currentPage == HOME_PAGE ||
           currentPage == HEALTH_PAGE || currentPage == CUSTOM_PAGE)

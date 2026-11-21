@@ -167,3 +167,12 @@ validate electrical wiring, hardware DMA, PSRAM or OTA rollback.
 The v2.9.0-dev source passes 113 Python tests (including GUI, shared state, atomic full-profile restore and the HTTP SDK), 12 native C++ domain programs and eight browser JavaScript programs. The final local PlatformIO build succeeds at 58,820 bytes static RAM and 2,372,603 bytes program Flash (37.7% of a 6 MiB slot). The versioned local binary has a SHA-256 manifest; owner-configured binaries remain excluded from Git.
 
 Read-only checks of the owner's device report firmware 2.4.0-dev, app0 running, app1 ready (6 MiB) and boot health passed. No later milestone was flashed in this development pass. See DEVELOPMENT_STATUS.md for the scope and physical acceptance work still pending.
+
+
+## v2.10 Music and production planning checkpoint
+
+Local Python regression: **115 tests passed**. Native domain programs: **13 passed**, including the new strict UTF-8/Vietnamese boundary checks. Browser JavaScript programs: **8 passed**. Both embedded fonts contain real bitmaps for every NFC Vietnamese vowel/tone combination.
+
+The final PlatformIO build succeeds with **59,172 bytes static RAM** and **2,395,419 bytes program Flash** (38.1% of the 6 MiB slot). The optional Music metadata canvas reserves **79,040 bytes PSRAM**; direct drawing remains a fallback. Firmware BIN size: **2,454,800 bytes**. SHA-256: `3e07dd4c84a96281c817d9bba1a5f64bd67c2afc4abe876351ee3c1ceb590d1f`.
+
+The TFT design image is a simulation using the embedded bitmaps, not a physical capture. Web's expanded workspace was inspected in a local mock. Native GUI regression passed; final visual acceptance of the latest spacing and the packaged app on a clean Windows installation remains pending. No firmware was deployed. The next desktop/naming/OTA work is a proposal in [the production plan](PRODUCTION_PLAN.md).

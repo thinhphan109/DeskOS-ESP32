@@ -1,14 +1,17 @@
-# MèoDesk v2.9.0-dev — Smart Desk Companion
+# MèoDesk v2.10.0-dev — Smart Desk Companion
 
 Public Git checkouts exclude private configuration and firmware binaries.
 Start with [SOURCE_CHECKOUT.md](docs/SOURCE_CHECKOUT.md); private-ZIP notes
 below describe the original archive, not files published in this repository.
 
-The current source milestone is **2.9.0-dev**: Scene Studio, shared state,
-Cat Life, dashboard themes, productivity, bounded automation and integration feeds.
+The current source milestone is **2.10.0-dev**: Scene Studio, shared state,
+Cat Life, dashboard themes, productivity, bounded automation, integration feeds,
+and an expanded TFT Music scene with embedded Vietnamese glyphs.
 See [development status](docs/DEVELOPMENT_STATUS.md) for implemented scope,
 validation and remaining hardware acceptance, and [SDK usage](docs/INTEGRATION_SDK_V29.md).
 This is a development build, with deployment kept separate from source releases.
+See [the next desktop and OTA production plan](docs/PRODUCTION_PLAN.md) for proposed naming,
+product messages, update flow and acceptance gates.
 
 **Earlier milestone: Personal Studio 1.8.0-dev** adds compact Web/Windows
 controls, WebSocket shared state and a Midnight TFT clock scheduling fix.

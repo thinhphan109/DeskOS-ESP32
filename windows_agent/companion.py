@@ -21,7 +21,7 @@ from PySide6.QtGui import QAction, QColor, QFont, QIcon, QImage, QPainter, QPain
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
     QFileDialog, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QSpinBox,
-    QScrollArea, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
+    QScrollArea, QSizePolicy, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 import discovery
@@ -62,6 +62,12 @@ QLabel#focusClock { font: 800 72px Consolas; color: #382f54; }
 QLabel#albumCover { background: #f2e8dc; border: 1px solid #d6cabb; border-radius: 13px;
   color: #837569; font: 700 11px Consolas; }
 QFrame#darkCard { background: #292f34; border-radius: 20px; }
+QFrame#musicPanel { background: #152d27; border-radius: 14px; }
+QLabel#musicSong { color: #f2f8f4; font: 700 34px 'Segoe UI'; }
+QLabel#musicArtist { color: #c4d9ce; font: 18px 'Segoe UI'; }
+QLabel#musicState { color: #c4d9ce; font: 13px 'Segoe UI'; }
+QFrame#musicPanel QProgressBar { background: #40594e; height: 6px; border-radius: 3px; }
+QFrame#musicPanel QProgressBar::chunk { background: #86e0b0; border-radius: 3px; }
 QLabel#bigNumber { font: 800 60px Consolas; color: #25332f; }
 QLabel#darkNumber { font: 800 33px Consolas; color: #fff9ee; }
 QLabel#darkMeta { font: 11px Consolas; color: #b8c0bf; }
@@ -260,6 +266,9 @@ class MainWindow(QMainWindow):
             self.update_from_worker({"type": "device_state", "data": self._preview_state})
             self.hint.setText("DEMO · dữ liệu mô phỏng · không kết nối hoặc cập nhật thiết bị")
             self.sync_label.setText("DEMO · xem trước trên máy")
+            self.update_from_worker({"type":"media", "data":{"available":True,"playing":False,
+                "title":"Đừng làm trái tim anh đau", "artist":"Sơn Tùng M-TP · DEMO",
+                "position_ms":92000,"duration_ms":227000}})
             self.set_tab(6)
         if self.settings.host:
             self.host_edit.setText(self.settings.host)
@@ -387,42 +396,40 @@ class MainWindow(QMainWindow):
         widget.setObjectName("tabPage")
         box = QVBoxLayout(widget)
         box.setContentsMargins(0, 0, 0, 0)
-        self.heading(box, "03 / NOW PLAYING", "Nhạc đang chạm tới tai.",
-                     "Đọc trực tiếp Windows Media Session; không nhạc sẽ hiển thị đúng 'chưa phát'.")
-        panel, p = card("mintCard")
-        p.addWidget(text("WINDOWS MEDIA SESSION", "eyebrow"))
+        self.heading(box, "03 / NOW PLAYING", "Nhạc đang phát", "Spotify và các trình phát hỗ trợ Windows Media Controls.")
+        panel, p = card("musicPanel")
+        panel.setMinimumHeight(380)
+        panel.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Maximum)
+        p.setContentsMargins(24, 24, 24, 24)
+        p.setSpacing(16)
         music_hero = QHBoxLayout()
-        left = QVBoxLayout()
-        self.song = text("Chưa có bản nhạc", "title", wrap=True)
-        left.addWidget(self.song)
-        self.artist = text("Mở Spotify hoặc trình phát hỗ trợ Windows Media Controls.", "subtitle", wrap=True)
-        left.addWidget(self.artist)
-        music_hero.addLayout(left, 1)
-        self.music_cover = text("ALBUM\nART N/A", "albumCover")
+        music_hero.setSpacing(24)
+        self.music_cover = text("Chưa có\nảnh bìa", "albumCover")
         self.music_cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.music_cover.setFixedSize(116, 116)
+        self.music_cover.setFixedSize(220, 220)
         music_hero.addWidget(self.music_cover)
-        music_cat = QLabel()
-        music_pixmap = QPixmap(str(Path(__file__).resolve().parent / "assets" / "music.png"))
-        music_cat.setPixmap(music_pixmap.scaled(106, 106, Qt.AspectRatioMode.KeepAspectRatio,
-                                                Qt.TransformationMode.SmoothTransformation))
-        music_cat.setFixedSize(108, 108)
-        music_hero.addWidget(music_cat)
+        left = QVBoxLayout()
+        left.setSpacing(12)
+        left.addStretch()
+        self.song = text("Chưa có bản nhạc", "musicSong", wrap=True)
+        self.song.setTextFormat(Qt.TextFormat.PlainText)
+        self.song.setMinimumWidth(0)
+        left.addWidget(self.song)
+        self.artist = text("Mở Spotify trên PC để bắt đầu.", "musicArtist", wrap=True)
+        self.artist.setTextFormat(Qt.TextFormat.PlainText)
+        left.addWidget(self.artist)
+        left.addStretch()
+        music_hero.addLayout(left, 1)
         p.addLayout(music_hero)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
         p.addWidget(self.progress)
-        self.music_state = text("— / —", "smallLabel")
+        self.music_state = text("Chưa có phiên phát nhạc", "musicState", wrap=True)
         p.addWidget(self.music_state)
         box.addWidget(panel)
-        note, n = card()
-        n.addWidget(text("Điều khiển từ Web Studio", "cardTitle"))
-        n.addWidget(text("Bản v1.0 hiển thị ảnh bìa album khi Windows cung cấp, đồng bộ lên TFT."
-                         " Lệnh phát/dừng và chuyển bài vẫn điều khiển qua ESP32."
-                         " Chức năng phụ thuộc trình phát hỗ trợ Windows Media Session.", "subtitle", wrap=True))
-        box.addWidget(note)
+        box.addWidget(text("Ảnh bìa phụ thuộc trình phát. Điều khiển nhạc từ Web Studio hoặc trình phát trên PC.", "subtitle", wrap=True))
         box.addStretch()
         self.stack.addWidget(widget)
 
@@ -1096,6 +1103,8 @@ class MainWindow(QMainWindow):
 
     def tick_media_display(self) -> None:
         media = self.media_display.state
+        if self.preview_mode and media.get("available"):
+            self.media_display.update(media) # Static DEMO sample; no provider/network.
         if not media.get("available"): return
         progress = self.media_display.position()
         if progress is None:
@@ -1363,11 +1372,11 @@ class MainWindow(QMainWindow):
                 # Copy: original bytes belong to the worker's signal payload.
                 image = QImage(pixels, 64, 64, 64 * 2, QImage.Format.Format_RGB16).copy()
                 self.music_cover.setPixmap(QPixmap.fromImage(image).scaled(
-                    114, 114, Qt.AspectRatioMode.KeepAspectRatio,
+                    218, 218, Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation))
             else:
                 self.music_cover.clear()
-                self.music_cover.setText("ALBUM\nART N/A")
+                self.music_cover.setText("Chưa có\nảnh bìa")
         elif kind == "focus":
             if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return

@@ -11,14 +11,14 @@ from companion_core import wire_media
 
 class ContractTests(unittest.TestCase):
     def test_python_and_firmware_versions_match(self):
-        version = (ROOT / 'windows_agent/app_version.py').read_text().split('"')[1]
-        header = (ROOT / 'firmware/src/app_version.h').read_text()
+        version = (ROOT / 'windows_agent/app_version.py').read_text(encoding="utf-8").split('"')[1]
+        header = (ROOT / 'firmware/src/app_version.h').read_text(encoding="utf-8")
         self.assertIn('"'+version+'"', header)
     def test_ota_16mb_partition_layout(self):
         """Boot, NVS and two independent 6 MiB slots must never overlap."""
         csv = ROOT / "firmware" / "meodesk_ota_16mb.csv"
         partitions = {}
-        for raw in csv.read_text().splitlines():
+        for raw in csv.read_text(encoding="utf-8").splitlines():
             if not raw.strip() or raw.lstrip().startswith("#"):
                 continue
             fields = [entry.strip() for entry in raw.split(",")]
@@ -47,12 +47,12 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(0xC10000 + 2 * bank, partitions["coredump"][0])
 
     def test_json_schema_parses(self):
-        schema = json.loads((ROOT / "protocol" / "schema-v1.json").read_text())
+        schema = json.loads((ROOT / "protocol" / "schema-v1.json").read_text(encoding="utf-8"))
         self.assertEqual(schema["$defs"]["media"]["properties"]["schema"]["const"], 1)
         self.assertIn("command_ack", schema["$defs"])
 
     def test_fixtures_keep_null_and_zero_distinct(self):
-        payload = json.loads((ROOT / "protocol" / "fixtures" / "telemetry-real.json").read_text())
+        payload = json.loads((ROOT / "protocol" / "fixtures" / "telemetry-real.json").read_text(encoding="utf-8"))
         self.assertIsNone(payload["cpu_temp_c"])
         self.assertEqual(payload["gpu_percent"], 0)
         self.assertFalse(payload["demo"])
@@ -60,7 +60,7 @@ class ContractTests(unittest.TestCase):
     def test_media_fixtures_wire_compatible(self):
         for name in ("media-playing.json", "media-unavailable.json"):
             with self.subTest(name=name):
-                payload = json.loads((ROOT / "protocol" / "fixtures" / name).read_text())
+                payload = json.loads((ROOT / "protocol" / "fixtures" / name).read_text(encoding="utf-8"))
                 sent = wire_media(payload)
                 # v1.0+ adds an optional artwork ID. Historical v0.8 media
                 # fixtures intentionally omit it and must remain compatible.
@@ -69,7 +69,7 @@ class ContractTests(unittest.TestCase):
                 self.assertLess(len(json.dumps(sent).encode("utf-8")), 512)
 
     def test_firmware_keeps_legacy_routes(self):
-        source = (ROOT / "firmware" / "src" / "pc_bridge.cpp").read_text()
+        source = (ROOT / "firmware" / "src" / "pc_bridge.cpp").read_text(encoding="utf-8")
         for route in ("/api/status", "/api/telemetry", "/api/control", "/api/history",
                       "/api/settings", "/api/cat.bmp", "/api/v1/performance", "/api/v1/ota/status",
                       "/api/v1/ota/upload", "/api/v1/media",
@@ -79,21 +79,21 @@ class ContractTests(unittest.TestCase):
                 self.assertIn('"' + route + '"', source)
 
     def test_motion_frame_switches_do_not_restart_pose_crossfade(self):
-        renderer = (ROOT / "firmware" / "src" / "main.cpp").read_text()
+        renderer = (ROOT / "firmware" / "src" / "main.cpp").read_text(encoding="utf-8")
         self.assertIn("catPack.frameAt(pose, cue.cel)", renderer)
         self.assertIn("motionDirector.sample(liveMotionContext(now), now)", renderer)
         self.assertIn("context.realPc = pcTelemetryFresh() && !pcTelemetry.demo", renderer)
         self.assertIn("if (pose != lastCatPose)", renderer)
         self.assertNotIn("if (cat != lastCatImage)", renderer)
         self.assertIn("tft.pushImageDMA(", renderer)
-        bridge = (ROOT / "firmware" / "src" / "pc_bridge.cpp").read_text()
+        bridge = (ROOT / "firmware" / "src" / "pc_bridge.cpp").read_text(encoding="utf-8")
         self.assertIn('capabilities.add("catpack_motion_v2")', bridge)
         self.assertIn('capabilities.add("motion_director_v1")', bridge)
         self.assertIn('doc["accepted_pack_bytes"]', bridge)
 
     def test_firmware_has_one_entrypoint(self):
         src = ROOT / "firmware" / "src"
-        contents = "\n".join(p.read_text() for p in src.glob("*.cpp") if p.name != "cat_assets.cpp")
+        contents = "\n".join(p.read_text(encoding="utf-8") for p in src.glob("*.cpp") if p.name != "cat_assets.cpp")
         self.assertEqual(contents.count("void setup()"), 1)
         self.assertEqual(contents.count("void loop()"), 1)
 

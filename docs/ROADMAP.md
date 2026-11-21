@@ -86,3 +86,9 @@ Six bounded rules, dwell/cooldown/latch semantics, atomic profile backup and syn
 ## v2.9 source checkpoint
 
 Three expiring external-data widgets, paired feed endpoints and a stdlib Python/CLI integration client are implemented. See [Widget and Integration SDK](INTEGRATION_SDK_V29.md). The current board remains on its deployed firmware until the owner approves the later deployment phase.
+
+## v2.10 source checkpoint and production planning
+
+The Music scene uses the full TFT content width, a 120px album tile and embedded Noto Sans glyphs for NFC Vietnamese. Metadata redraws only when changed; the small timeline updates separately. The 64px artwork transport remains compatible. Firmware deployment and physical acceptance are still deferred.
+
+The [desktop and OTA plan](PRODUCTION_PLAN.md) proposes product naming, user-facing messages, connection lifecycle, packaging and a staged OTA experience. Branding and stable-release status are not changed by this plan.

@@ -1,5 +1,6 @@
 #include "pc_bridge.h"
 #include "core/desk_notification.h"
+#include "core/utf8_text.h"
 #include "ota_manager.h"
 #include "cat_pack.h"
 
@@ -734,7 +735,7 @@ static void receiveMedia() {
   const char *title = body["title"] | "";
   const char *artist = body["artist"] | "";
   const char *artId = body["artwork_id"] | "";
-  if (strlen(title) > 64 || strlen(artist) > 48 ||
+  if (strlen(title) > 64 || strlen(artist) > 48 || !validMediaText(title) || !validMediaText(artist) ||
       (artId[0] && !validArtId(artId)) ||
       !body["position_ms"].is<uint32_t>() || !body["duration_ms"].is<uint32_t>() ||
       body["duration_ms"].as<uint32_t>() > 86400000UL ||

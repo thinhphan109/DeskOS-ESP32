@@ -1,25 +1,26 @@
 # Tình hình phát triển MèoDesk
 
-Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển khai theo các mốc đến v2.9-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
+Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển khai theo các mốc đến v2.10-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
 
 | Mốc | Đã có trong mã nguồn | Giới hạn còn lại |
 |---|---|---|
 | v1.8 | Performance Lab, lịch vẽ đồng hồ theo giây, Studio gọn theo tab, trạng thái chung qua WebSocket | Cần đo TFT thực tế; DMA wait chưa phải toàn bộ thời gian chiếm bus SPI |
-| v1.9 | Manifest/hash/phiên bản OTA, lịch sử cập nhật, sao lưu cấu hình, Focus tùy chỉnh | Cần thử OTA và phục hồi cấu hình trên bo; chưa chứng minh rollback vật lý |
-| v2.0 | Hợp đồng widget, vùng vẽ độc lập, scene tùy chỉnh ID 14 | Giữ renderer hiện tại; chưa thay toàn bộ các trang cũ thành component |
-| v2.1 | Kéo widget, chỉnh kích thước/tọa độ, nhập/xuất JSON trên Web và Windows | Xem trước là bố cục; cần kiểm tra chữ và màu trên TFT |
+| v1.9 | Manifest/hash/phiên bản OTA, lịch sử cập nhật, sao lưu cấu hình, Focus tuỳ chỉnh | Cần thử OTA và phục hồi cấu hình trên bo; chưa chứng minh rollback vật lý |
+| v2.0 | Hợp đồng widget, vùng vẽ độc lập, scene tuỳ chỉnh ID 14 | Giữ renderer hiện tại; chưa thay toàn bộ các trang cũ thành component |
+| v2.1 | Kéo widget, chỉnh kích thước/toạ độ, nhập/xuất JSON trên Web và Windows | Xem trước là bố cục; cần kiểm tra chữ và màu trên TFT |
 | v2.2 | Ngủ/thức theo idle thật, chào buổi sáng, ưu tiên Focus/cảnh báo | Dùng bộ ảnh hiện có; chưa có bộ animation nhiều frame mới |
 | v2.3 | Cozy, Midnight, Auto, Cyberpunk, Sakura, Minimal | Là các palette trên bố cục hiện tại; chưa có theme pack độc lập |
 | v2.4 | Metadata/album art/điều khiển nhạc hiện có, timeline đồng nhất, dừng nội suy khi mất kết nối | Cần nghiệm thu với các trình phát thật; chưa phân tích beat âm thanh |
 | v2.5 | Biểu đồ PC 60 giây trên Windows, khoảng trống dữ liệu và tách DEMO | Nhiệt độ/quạt phụ thuộc cảm biến và provider; không dựng số liệu thay thế |
-| v2.6 | Nhật ký Focus quan sát được, nhắc nghỉ tùy chọn, khởi động cùng Windows, EXE từ CI | Nhật ký nằm ở Windows; chưa đồng bộ lịch cá nhân hoặc thống kê toàn bộ thời gian sử dụng PC |
+| v2.6 | Nhật ký Focus quan sát được, nhắc nghỉ tuỳ chọn, khởi động cùng Windows, EXE từ CI | Nhật ký nằm ở Windows; chưa đồng bộ lịch cá nhân hoặc thống kê toàn bộ thời gian sử dụng PC |
 | v2.7 | Thông báo qua API, ẩn nội dung mặc định, TTL/ưu tiên/chế độ yên tĩnh, dòng sự kiện trên TFT | Chưa tự đọc thông báo của các ứng dụng Windows khác |
 | v2.8 | Sáu quy tắc có thời gian giữ/chờ/chống lặp, sao lưu nguyên bộ, editor JSON đồng bộ | Editor nâng cao dùng JSON; chưa có trình dựng quy tắc trực quan |
 | v2.9 | Ba kênh dữ liệu ngoài có TTL, widget Data 1–3, SDK Python/CLI | Chưa tự kết nối lịch, thời tiết, Home Assistant hay tài khoản bên ngoài |
+| v2.10 | Music TFT rộng 304×160, ảnh bìa 120px, font tiếng Việt và cắt UTF-8; Music Web/Windows lớn hơn | Nguồn ảnh vẫn 64×64; cần nghiệm thu TFT và bản Windows cuối trên máy thật |
 
 ## Bằng chứng kiểm thử
 
-- Bộ kiểm thử Python có 113 bài, gồm GUI, đồng bộ, SDK HTTP, dữ liệu hết hạn và khôi phục cấu hình lớn. Các test GUI đã được cô lập khỏi cấu hình thiết bị thật.
+- Bộ kiểm thử Python có 115 bài, gồm GUI, đồng bộ, SDK HTTP, dữ liệu hết hạn, khôi phục cấu hình lớn, chuẩn hoá tiếng Việt và kiểm tra glyph trong font firmware. Các test GUI đã được cô lập khỏi cấu hình thiết bị thật.
 - Bộ kiểm thử C++ kiểm tra lịch vẽ, motion, profile, widget, theme, timeline, thông báo, automation và feed; JavaScript kiểm tra hợp đồng dữ liệu và trạng thái Web.
 - GitHub CI kiểm tra nguồn, build firmware và đóng gói EXE Windows. EXE v2.6 từ CI đã được mở bằng `--preview`, tải được ảnh và đổi theme cục bộ trên máy phát triển. Đây chưa phải nghiệm thu trên máy Windows sạch.
 - Các ảnh xem trước và tài liệu từng mốc nằm trong thư mục này. Firmware chứa cấu hình riêng được giữ ở máy, không push file nhị phân lên repository công khai.
@@ -31,8 +32,12 @@ Lần đọc trạng thái ngày 21/11/2026 từ `192.168.0.107` cho biết firm
 ## Phần cần chốt trước khi deploy rộng
 
 1. Kiểm tra đồng hồ Midnight, FPS, thời gian vẽ và đồng bộ trên TFT với bản mới; đối chiếu các phép đo cùng điều kiện.
-2. Thử scene tùy chỉnh, feed hết TTL, quy tắc, thông báo và lưu/khôi phục sau khởi động trên bo.
+2. Thử scene tuỳ chỉnh, feed hết TTL, quy tắc, thông báo và lưu/khôi phục sau khởi động trên bo.
 3. Thực hiện một lượt OTA có kiểm soát, xác nhận phiên bản/slot/health và đường phục hồi thực tế.
 4. Thử EXE mới trên Windows sạch, provider nhạc/cảm biến, nhắc nghỉ và startup khi người dùng bật.
 
 Phần v3.0 còn lại gồm điều khiển nhiều thiết bị đồng thời, driver cho màn hình khác, theme/animation pack độc lập và các adapter tích hợp cụ thể. `.meocat` v3 có nén, bộ ảnh mới, cảm ứng, cảm biến và âm thanh cần một lượt thiết kế/nghiệm thu riêng; chưa thay phân vùng Flash hoặc bootloader cho các mục này. Các bước hardening bảo mật tiếp tục để sau theo yêu cầu hiện tại.
+
+## Đợt chuẩn hoá sản phẩm tiếp theo
+
+[Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) đề xuất tên MiuDesk/MiuDesk Studio, nội dung giao diện, điều hướng, vòng đời kết nối và cải tiến cập nhật. Đây là kế hoạch; chưa đổi định danh kỹ thuật hoặc gắn nhãn stable cho bản dev.

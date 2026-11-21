@@ -152,7 +152,7 @@ class GuiSmokeTests(unittest.TestCase):
                                     "id": "a" * 16})
             self.assertIsNotNone(win.music_cover.pixmap())
             win.update_from_worker({"type": "artwork", "pixels": None, "id": ""})
-            self.assertEqual(win.music_cover.text(), "ALBUM\nART N/A")
+            self.assertEqual(win.music_cover.text(), "Chưa có\nảnh bìa")
             win.update_from_worker({"type": "focus", "data": {"focus_remaining_s": 1390,
                 "focus_running": True, "focus_phase": "work", "focus_sessions": 2}})
             self.assertEqual(win.focus_clock.text(), "23:10")

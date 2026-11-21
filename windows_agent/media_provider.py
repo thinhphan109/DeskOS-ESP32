@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import io
 import time
+import unicodedata
 from typing import Any
 
 
@@ -46,8 +47,9 @@ async def _snapshot() -> dict[str, Any]:
     # WinRT PlaybackStatus.PLAYING == 4. IntEnum.__str__ may just be '4', so
     # string matching for the word 'playing' silently misreports every track!
     is_playing = playback is not None and int(playback.playback_status) == 4
-    return {"available": True, "title": str(props.title or "")[:95],
-            "artist": str(props.artist or "")[:75], "album": str(props.album_title or "")[:75],
+    return {"available": True, "title": unicodedata.normalize("NFC", str(props.title or ""))[:95],
+            "artist": unicodedata.normalize("NFC", str(props.artist or ""))[:75],
+            "album": unicodedata.normalize("NFC", str(props.album_title or ""))[:75],
             "playing": is_playing,
             "position_ms": max(0, position - start), "duration_ms": max(0, end - start),
             "source": "windows_smtc", "sampled_at": int(time.time())}
@@ -91,8 +93,8 @@ async def _thumbnail_bytes(expected_title: str, expected_artist: str) -> bytes |
     if session is None:
         return None
     props = await session.try_get_media_properties_async()
-    if (str(props.title or "")[:95] != expected_title or
-            str(props.artist or "")[:75] != expected_artist or
+    if (unicodedata.normalize("NFC", str(props.title or ""))[:95] != expected_title or
+            unicodedata.normalize("NFC", str(props.artist or ""))[:75] != expected_artist or
             props.thumbnail is None):
         return None
     stream = await props.thumbnail.open_read_async()

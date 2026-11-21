@@ -149,6 +149,22 @@ static const char WEB_UI_HTML[] PROGMEM = R"MEODESK(
     .scene-composer{padding:22px;background:#fffefa;border:1px solid #d9ded4;border-radius:14px;margin-bottom:20px}.scene-composer h3{margin:0;font-size:22px}.scene-composer p{font-size:12px;line-height:1.6;color:#52645a}.composer-body{display:grid;grid-template-columns:324px minmax(180px,1fr);gap:24px;align-items:start;margin:16px 0}.composer-canvas{display:block;width:324px;height:auto;aspect-ratio:27/20;max-width:100%;background:#f7f2e9;border:1px solid #bbb5a8;touch-action:none;cursor:move}.composer-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px}.composer-fields label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#405448}.composer-fields .wide{grid-column:1/-1}.composer-fields input,.composer-fields select{width:100%;min-width:0;border:1px solid #b9c5b7;background:#fffefa;color:#263e34;border-radius:7px;padding:8px;font:13px inherit}.composer-actions{display:flex;flex-wrap:wrap;gap:8px}.composer-actions button{border:1px solid #c1cdbd;border-radius:8px;background:#f7f9f3;color:#263e34;padding:9px 12px;font-size:12px;cursor:pointer}.composer-actions button:hover{background:#e5efdf}.composer-actions button:disabled{opacity:.5;cursor:not-allowed}.composer-actions .save-layout{background:#263e34;color:#fff}.composer-actions .save-layout:hover{background:#345e48}.scene-composer :focus-visible{outline:2px solid #315a46;outline-offset:3px}.scene-composer .scene-message{min-height:20px;color:#405448;margin-bottom:0}@media(max-width:650px){.composer-body{grid-template-columns:1fr;gap:16px}.scene-composer{padding:16px}.composer-canvas{justify-self:center}}
 
     .lab-panel>summary,.rule-editor>summary{cursor:pointer;font-size:18px;font-weight:700;color:#263e34}.rule-editor{grid-column:1/-1;padding:18px 22px;border:1px solid #d9ded4;border-radius:14px;background:#fffefa;margin-bottom:18px}.rule-editor p{font-size:12px;line-height:1.6;color:#52645a;max-width:75ch}.rule-editor textarea{box-sizing:border-box;width:100%;height:210px;min-height:160px;max-height:420px;resize:vertical;background:#f7f9f3;color:#263e34;border:1px solid #bac8b9;border-radius:8px;padding:12px;font:12px/1.6 Consolas,monospace;tab-size:2;caret-color:#263e34;margin:8px 0 12px}.rule-editor :focus-visible{outline:2px solid #315a46;outline-offset:3px}
+
+    /* Music owns the workspace width; other tools retain their compact layout. */
+    #view-focus .music-studio{grid-column:1/-1;order:-1;background:#152d27;color:#f2f8f4;padding:28px;min-height:390px}
+    .music-hero{display:grid;grid-template-columns:220px minmax(0,1fr);align-items:center;gap:32px;margin-bottom:28px}
+    .music-artwork{width:220px;aspect-ratio:1;background:#284c3e;border-radius:12px;overflow:hidden;position:relative;display:grid;place-items:center}
+    .music-artwork>svg{width:50%;height:50%;color:#86e0b0}.music-artwork:has(img:not([hidden]))>svg{display:none}
+    .music-artwork .album-image{position:static;width:100%;height:100%;border:0;border-radius:0;box-shadow:none;object-fit:cover}
+    #view-focus .music-studio h2{font-family:'Segoe UI',system-ui,sans-serif;font-style:normal;font-weight:700;font-size:clamp(28px,3.6vw,46px);line-height:1.25;margin:0 0 16px;max-width:100%;overflow-wrap:anywhere;letter-spacing:-.02em}
+    #view-focus .music-studio .artist{font:18px/1.6 'Segoe UI',sans-serif;color:#c4d9ce;margin:0;max-width:100%;overflow-wrap:anywhere}
+    .music-studio .track{background:#40594e;height:6px}.music-studio .track div{background:#86e0b0}
+    .music-studio .music-time,.music-studio .music-status{color:#c4d9ce;font-family:'Segoe UI',sans-serif}
+    .music-actions{gap:12px;flex-wrap:wrap}.music-actions button{display:grid;place-items:center;width:52px;height:48px;background:#284c3e;color:#e7f6ec;border-radius:10px;border:0}
+    .music-actions button.main{background:#bce7d2;color:#143c2c;width:64px;height:56px}.music-actions button:hover{background:#35634f;color:#fff}
+    .music-actions button:disabled{opacity:.55;cursor:not-allowed}.music-actions button:focus-visible{outline:2px solid #bce7d2;outline-offset:4px}.music-actions svg{width:24px;height:24px}
+    .music-actions .play-icon{display:none}.music-studio.paused .play-icon{display:block}.music-studio.paused .pause-icon{display:none}
+    @media(max-width:650px){#view-focus .music-studio{padding:20px}.music-hero{grid-template-columns:1fr;gap:20px}.music-artwork{width:min(100%,240px);justify-self:center}.music-copy{text-align:center}.music-actions{justify-content:center}.music-actions .music-status{width:100%;text-align:center}}
   </style>
 </head>
 <body>
@@ -322,16 +338,20 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
 
     <div class="feature-grid">
       <section class="music-studio" aria-labelledby="musicTitle">
-        <div class="eyebrow">06 — WINDOWS NOW PLAYING / LIVE</div>
-        <img class="album-image" id="albumCoverWeb" alt="Album cover from Windows Media" hidden>
-        <h2 id="musicTitle">Nothing playing</h2>
-        <div class="artist" id="musicArtist">Waiting for a Windows media session.</div>
+        <div class="music-hero">
+          <div class="music-artwork">
+            <img class="album-image" id="albumCoverWeb" alt="Ảnh bìa từ Windows Media" hidden>
+            <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><circle cx="50" cy="50" r="38"/><circle cx="50" cy="50" r="25"/><circle cx="50" cy="50" r="7"/></svg>
+          </div>
+          <div class="music-copy"><h2 id="musicTitle">Chưa phát nhạc</h2>
+          <div class="artist" id="musicArtist">Mở Spotify hoặc trình phát trên PC.</div></div>
+        </div>
         <div class="track"><div id="musicBar"></div></div>
         <div class="music-time" id="musicTime">— / — · NOT AVAILABLE</div>
         <div class="music-actions">
-          <button data-media="media_previous" title="Previous track">⏮</button>
-          <button class="main" data-media="media_play_pause" title="Play / pause">⏯</button>
-          <button data-media="media_next" title="Next track">⏭</button>
+          <button data-media="media_previous" title="Bài trước" aria-label="Bài trước"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 4h3v16H4zM20 4v16L8 12z"/></svg></button>
+          <button class="main" data-media="media_play_pause" title="Phát / dừng" aria-label="Phát / dừng"><svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 3v18l15-9z"/></svg></button>
+          <button data-media="media_next" title="Bài tiếp" aria-label="Bài tiếp"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 4h3v16h-3zM4 4v16l12-8z"/></svg></button>
           <span class="music-status" id="musicCommand">WINDOWS AGENT REQUIRED</span>
         </div>
       </section>
@@ -929,8 +949,9 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       setInterval(paintMediaTime,250);
       function renderMedia(data){
         mediaAnchor={data,at:performance.now()};
-        $('musicTitle').textContent=data.available?(data.title||'Untitled track'):'Nothing playing';
-        $('musicArtist').textContent=data.available?(data.artist||'Unknown artist'):'No active Windows media session';
+        $('musicTitle').closest('.music-studio').classList.toggle('paused',!data.playing);
+        $('musicTitle').textContent=data.available?(data.title||'Không có tên bài'):'Chưa phát nhạc';
+        $('musicArtist').textContent=data.available?(data.artist||'Không rõ nghệ sĩ'):'Chưa có phiên phát nhạc từ PC';
         if(!data.available)$('musicBar').style.width='0%';
         paintMediaTime();renderArtwork(data);
       }
