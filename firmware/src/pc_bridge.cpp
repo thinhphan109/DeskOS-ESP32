@@ -1,4 +1,5 @@
 #include "pc_bridge.h"
+#include "core/desk_notification.h"
 #include "ota_manager.h"
 #include "cat_pack.h"
 
@@ -27,6 +28,8 @@ MediaState pcMedia;
 static MoodEngine moodEngine;
 static CommandQueue mediaCommands;
 static EventEngine deskEvents;
+static NotificationGate notificationGate;
+const EventEngine::Event *pcBridgeActiveEvent() { return deskEvents.active(millis()); }
 static constexpr size_t ART_WIDTH = 64;
 static constexpr size_t ART_PIXELS = ART_WIDTH * ART_WIDTH;
 static constexpr size_t ART_BYTES = ART_PIXELS * sizeof(uint16_t);
@@ -483,6 +486,44 @@ static void exportConfiguration() {
   replyJson(200, doc);
 }
 
+static void receiveNotification() {
+  if(!authorized()) return;
+  const String payload=httpServer.arg("plain"); JsonDocument body;
+  if(payload.length()>768 || deserializeJson(body,payload) || !body["source"].is<const char*>()) {
+    replyError(400,"invalid notification"); return;
+  }
+  DeskNotification note;
+  const char *source=body["source"];
+  if(strlen(source)>20) { replyError(400,"invalid notification source"); return; }
+  snprintf(note.source,sizeof(note.source),"%s",source);
+  if(!body["hidden"].isNull()) {
+    if(!body["hidden"].is<bool>()) { replyError(400,"hidden must be boolean"); return; }
+    note.hidden=body["hidden"];
+  }
+  for(const char *key : {"priority","ttl_s"}) {
+    if(!body[key].isNull() && (!body[key].is<int>() || body[key].as<int>()<0 || body[key].as<int>()>255)) {
+      replyError(400,"invalid notification options"); return;
+    }
+  }
+  note.priority=body["priority"] | 1; note.ttlSeconds=body["ttl_s"] | 8;
+  if(!note.hidden) {
+    if(!body["text"].is<const char*>() || strlen(body["text"].as<const char*>())>60) {
+      replyError(400,"text must be 1..60 printable ASCII characters"); return;
+    }
+    snprintf(note.text,sizeof(note.text),"%s",body["text"].as<const char*>());
+  }
+  if(!note.valid()) { replyError(400,"invalid notification source, text, priority or TTL"); return; }
+  if(!healthSettings.quiet && !notificationGate.accept(millis())) {
+    replyError(429,"wait two seconds before another notification"); return;
+  }
+  if(!healthSettings.quiet) {
+    char code[25]; snprintf(code,sizeof(code),"ext_%s",note.source);
+    pcBridgePushEvent(code,note.displayText(),note.priority,static_cast<uint32_t>(note.ttlSeconds)*1000UL);
+  }
+  JsonDocument result;result["ok"]=true;result["suppressed"]=healthSettings.quiet;
+  replyJson(200,result);
+}
+
 static void sendOtaHistory() {
   if (!authorized()) return;
   JsonDocument doc; doc["schema"] = 1; doc["updates"] = otaHistory.as<JsonArray>();
@@ -929,6 +970,7 @@ static void fillStatus(JsonDocument &doc) {
   capabilities.add("event_timeline");
   capabilities.add("focus_sync");
   capabilities.add("focus_completion_cursor_v1");
+  capabilities.add("notifications_v1");
   capabilities.add("tft_themes");
   capabilities.add("scene_shortcuts_v1");
   capabilities.add("cat_behavior_v1");
@@ -1609,6 +1651,7 @@ void pcBridgeBegin(UiControlCallback onControl, UiStatusCallback onStatus,
   httpServer.on("/api/v1/artwork", HTTP_POST, finishArtworkUpload, receiveArtworkUpload);
   httpServer.on("/api/v1/artwork.bmp", HTTP_GET, sendArtworkBmp);
   httpServer.on("/api/v1/events", HTTP_GET, sendEvents);
+  httpServer.on("/api/v1/notifications", HTTP_POST, receiveNotification);
   httpServer.on("/api/v1/focus", HTTP_GET, sendFocus);
   httpServer.on("/api/v1/focus", HTTP_POST, receiveFocus);
   httpServer.on("/api/v1/focus/config", HTTP_POST, configureFocus);

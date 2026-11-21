@@ -70,3 +70,7 @@ Native Windows Overview has bounded CPU/GPU/RAM history with explicit gaps, sour
 ## v2.6 source checkpoint
 
 Observed Focus completions, local daily journal, opt-in break reminders and explicit Windows startup settings are implemented. See [Productivity Desk](PRODUCTIVITY_V26.md). Calendar account access and complete PC usage accounting remain separate integrations.
+
+## v2.7 source checkpoint
+
+Bounded notifications, private-by-default first-party payloads, quiet/priority/TTL policy and a small TFT event strip are implemented. See [Context and notifications](CONTEXT_NOTIFICATIONS_V27.md). OS notification capture remains an optional integration.

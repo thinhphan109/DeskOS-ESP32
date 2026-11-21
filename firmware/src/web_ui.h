@@ -145,6 +145,7 @@ static const char WEB_UI_HTML[] PROGMEM = R"MEODESK(
     @media(max-width:850px){.workspace-panel,.workspace-panel .main-grid{grid-template-columns:1fr}.workspace-panel>*{grid-column:1!important}.pet-card{min-height:230px}.pet-art{max-width:180px}.scene-studio,.ota-panel{grid-template-columns:1fr}.workspace-panel>.main-grid{grid-column:1}.intro p{max-width:260px}.living-info .ambient-metrics{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:540px){.wrap{padding:0 12px 20px}.topbar{gap:10px}.brand sub{display:none}.intro{display:block;padding:16px 0}.intro h1{font-size:26px;letter-spacing:-.6px}.intro p{max-width:100%;font-size:12px;margin-top:6px}.studio-nav{gap:0}.studio-nav button{flex:1;padding:10px 7px;font-size:12px}.sync-mode{width:100%;margin:0;padding:8px 0 0}.pet-card,.metric-card,.control-card,.link-card,.health-story,.health-settings,.focus-studio,.living-info,.scene-studio,.music-studio,.wifi-studio,.ota-panel{padding:16px}.pet-copy{max-width:55%;padding-top:10px}.pet-copy h2{font-size:25px}.pet-art{min-width:100px;width:37%;right:12px}.history-panel{padding:16px}.history-layout{grid-template-columns:1fr}.history-aside{display:grid;grid-template-columns:repeat(3,1fr)}.scene-selects{grid-template-columns:repeat(2,minmax(0,1fr))}.device-details{gap:10px}.mood-gallery{grid-template-columns:repeat(4,minmax(0,1fr))}.music-status{white-space:normal}}
 
+    .composer-fields input[type=checkbox]{width:auto;align-self:flex-start;accent-color:#315a46}
     .scene-composer{padding:22px;background:#fffefa;border:1px solid #d9ded4;border-radius:14px;margin-bottom:20px}.scene-composer h3{margin:0;font-size:22px}.scene-composer p{font-size:12px;line-height:1.6;color:#52645a}.composer-body{display:grid;grid-template-columns:324px minmax(180px,1fr);gap:24px;align-items:start;margin:16px 0}.composer-canvas{display:block;width:324px;height:auto;aspect-ratio:27/20;max-width:100%;background:#f7f2e9;border:1px solid #bbb5a8;touch-action:none;cursor:move}.composer-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px}.composer-fields label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#405448}.composer-fields .wide{grid-column:1/-1}.composer-fields input,.composer-fields select{width:100%;min-width:0;border:1px solid #b9c5b7;background:#fffefa;color:#263e34;border-radius:7px;padding:8px;font:13px inherit}.composer-actions{display:flex;flex-wrap:wrap;gap:8px}.composer-actions button{border:1px solid #c1cdbd;border-radius:8px;background:#f7f9f3;color:#263e34;padding:9px 12px;font-size:12px;cursor:pointer}.composer-actions button:hover{background:#e5efdf}.composer-actions button:disabled{opacity:.5;cursor:not-allowed}.composer-actions .save-layout{background:#263e34;color:#fff}.composer-actions .save-layout:hover{background:#345e48}.scene-composer :focus-visible{outline:2px solid #315a46;outline-offset:3px}.scene-composer .scene-message{min-height:20px;color:#405448;margin-bottom:0}@media(max-width:650px){.composer-body{grid-template-columns:1fr;gap:16px}.scene-composer{padding:16px}.composer-canvas{justify-self:center}}
   </style>
 </head>
@@ -382,6 +383,17 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
       const configPanel=document.createElement('section');configPanel.className='lab-panel';
       configPanel.innerHTML='<h3>Configuration backup</h3><p>Export scenes, theme, Focus and alert preferences. Wi-Fi passwords and pairing keys are excluded.</p><div class="actions"><button class="act" id="configExport">Export configuration</button><input id="configFile" type="file" accept=".json,application/json" aria-label="Configuration JSON"><button class="act" id="configRestore">Restore selected file</button></div><p id="configResult" role="status">Restore validates the whole file before saving. A changed Focus duration resets its current session.</p><details><summary>Firmware update history</summary><button class="act" id="otaHistoryRefresh">Read device history</button><ol id="otaHistoryList"><li>No history loaded.</li></ol></details>';
       $('view-device').append(configPanel);
+      const notifyPanel=document.createElement('section');notifyPanel.className='lab-panel';
+      notifyPanel.innerHTML='<h3>Desk notifications</h3><p>Send a short notice for eight seconds. Quiet mode suppresses notices; critical device alerts keep priority.</p><div class="composer-fields"><label>Notice · ASCII<input id="noticeText" maxlength="60" value="Desk reminder"></label><label><input id="noticeHidden" type="checkbox" checked>Hide content · send a generic notice</label></div><div class="composer-actions"><button id="noticeSend" disabled>Send notice</button></div><p id="noticeResult" role="status">Requires compatible firmware.</p>';
+      $('view-device').append(notifyPanel);
+      // NOTIFICATION_CONTRACT_BEGIN
+      function prepareNotification(text,hidden){
+        if(!hidden&&(typeof text!=='string'||text.length<1||text.length>60||/[^ -~]/.test(text)))throw Error('Use 1–60 printable ASCII characters for the TFT label.');
+        return {source:'web',text:hidden?'New notification':text,hidden,ttl_s:8,priority:1};
+      }
+      // NOTIFICATION_CONTRACT_END
+      $('noticeSend').onclick=async()=>{try{const result=await keyedJson('/api/v1/notifications',prepareNotification($('noticeText').value,$('noticeHidden').checked));$('noticeResult').textContent=result.suppressed?'Quiet mode suppressed this notice.':'Notice accepted · eight-second TTL.';}catch(e){$('noticeResult').textContent=e.message;}};
+
       const focusConfig=document.createElement('form');focusConfig.className='focus-config';
       focusConfig.innerHTML='<label>Work · min<input id="focusWorkMin" type="number" min="1" max="180" value="25" required></label><label>Break · min<input id="focusBreakMin" type="number" min="1" max="60" value="5" required></label><label>Session goal<input id="focusGoal" type="number" min="1" max="24" value="4" required></label><button class="act" type="submit">Save Focus plan</button>';
       document.querySelector('.focus-studio').append(focusConfig);
@@ -733,6 +745,8 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
         $('focusBar').style.width=(Math.round(100*(duration-Math.min(duration,seconds))/duration))+'%';
         $('focusHero').textContent=data.focus_running?'Ⅱ Pause focus':'▶ Start / resume';}
       function update(data){
+        $('noticeSend').disabled=!data.capabilities?.includes('notifications_v1');
+        if(!$('noticeSend').disabled&&$('noticeResult').textContent==='Requires compatible firmware.')$('noticeResult').textContent='Ready · hidden content is removed before sending.';
         syncScene(data);
         $('firmwareBuild').textContent=data.version||'unknown';
         const labSupported=Array.isArray(data.capabilities)&&data.capabilities.includes('performance_lab_v1');

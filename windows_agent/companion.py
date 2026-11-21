@@ -33,6 +33,7 @@ from scene_layout import validate_layout
 from telemetry_chart import TelemetryChart
 from focus_journal import FocusJournal
 import startup
+from desk_notification import notification_payload
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings, user_config_path
 from state_sync import StateCursor, FocusDisplay, MediaDisplay
@@ -522,6 +523,15 @@ class MainWindow(QMainWindow):
         b.addWidget(startup_apply)
         self.startup_hint = text("Chỉ thay đổi khi nhấn Áp dụng. Không cần quyền quản trị.", "subtitle", wrap=True)
         b.addWidget(self.startup_hint)
+        b.addWidget(text("Thông báo lên MèoDesk", "cardTitle"))
+        self.notification_text=QLineEdit("Desk reminder")
+        self.notification_text.setMaxLength(60)
+        self.notification_text.setPlaceholderText("Nhãn TFT dùng ASCII")
+        b.addWidget(self.notification_text)
+        self.notification_hidden=QCheckBox("Ẩn nội dung · chỉ hiện New notification")
+        self.notification_hidden.setChecked(True);b.addWidget(self.notification_hidden)
+        notify_button=button("Gửi thông báo · 8 giây")
+        notify_button.clicked.connect(self.send_desk_notification);b.addWidget(notify_button)
         b.addWidget(text("Cấu hình thiết bị", "cardTitle"))
         row = QHBoxLayout()
         for caption, operation in (("Xuất cấu hình", self.export_device_config), ("Khôi phục từ file", self.restore_device_config)):
@@ -848,6 +858,12 @@ class MainWindow(QMainWindow):
             try: write_settings(self.settings)
             except OSError as error: self.focus_daily.setText(str(error))
 
+    def send_desk_notification(self) -> None:
+        try:
+            payload=notification_payload(self.notification_text.text(),hidden=self.notification_hidden.isChecked())
+            self.configuration_request("/api/v1/notifications",payload)
+        except ValueError as error: self.profile_hint.setText(str(error))
+
     def apply_startup(self) -> None:
         if self.preview_mode: return
         try:
@@ -888,7 +904,8 @@ class MainWindow(QMainWindow):
                 if endpoint == "/api/v1/ota/history":
                     self.bus.status.emit({"type": "ota_history", "data": result})
                     return
-                self.bus.status.emit({"type": "config_result", "ok": True, "endpoint": endpoint, "message": "Đã xuất cấu hình." if export_path else "Đã lưu cấu hình trên ESP32."})
+                message=("Chế độ yên tĩnh đang ẩn thông báo." if result.get("suppressed") else "Đã gửi thông báo.") if endpoint=="/api/v1/notifications" else "Đã xuất cấu hình." if export_path else "Đã lưu cấu hình trên ESP32."
+                self.bus.status.emit({"type": "config_result", "ok": True, "endpoint": endpoint, "message": message})
                 if not export_path: self.refresh_device_state()
             except (OSError, ValueError, TimeoutError) as error:
                 self.bus.status.emit({"type": "config_result", "message": str(error)[:160]})

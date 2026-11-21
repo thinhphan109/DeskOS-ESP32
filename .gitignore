@@ -25,3 +25,6 @@ baseline/
 *.map
 *.exe
 MeoDeskCompanion-Windows-x64.zip
+
+.serena/
+*.sqlite3

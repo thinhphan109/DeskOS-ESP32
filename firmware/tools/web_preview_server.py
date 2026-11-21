@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT.parent / "windows_agent"))
+from desk_notification import notification_payload
 from device_config import validate_backup
 from scene_layout import DEFAULT_LAYOUT, validate_layout
 import copy
@@ -188,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
             preview = STATE["preview"] >= 0 and time.monotonic() < STATE["preview_until"]
             mood = MOODS[STATE["preview"]] if preview else "demo"
             return self.reply({"version": VERSION + "-mock", "device": "MEO DESK / MOCK",
-                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1"],
+                               "capabilities": ["performance_lab_v1", "device_profile_v1", "focus_config_v1", "widget_scene_v1", "notifications_v1"],
                                "lab_enabled": STATE["lab_enabled"], "lab_valid": False,
                                "wifi_connected": True, "wifi_ssid": "SIMULATED NETWORK", "wifi_rssi": -50,
                                "ip": "127.0.0.1 (mock)", "ap_ip": "127.0.0.1", "esp_heap_kb": 206,
@@ -264,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["settings"].update({key: clean[key] for key in STATE["settings"]})
                 STATE.update(focus_running=False, focus_phase="work", focus_remaining_s=clean["focus_work_min"]*60)
                 return self.reply({"ok": True, "persisted": False, "mode": "demo"})
+            if self.path == "/api/v1/notifications":
+                notification_payload(data.get("text",""),data.get("hidden",True),data.get("source",""),data.get("ttl_s",8),data.get("priority",1))
+                return self.reply({"ok": True, "suppressed": STATE["settings"]["quiet"], "mode": "demo"})
             if self.path == "/api/v1/scene-layout":
                 STATE["scene_layout"] = validate_layout(data)
                 STATE["scene_layout_revision"] += 1

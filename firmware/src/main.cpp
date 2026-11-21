@@ -117,6 +117,7 @@ void applyFpsProfile(uint8_t profile) {
 FocusTimer focusTimer;
 uint32_t focusCompletedTotal=0;
 uint8_t focusLastCompletedMin=0;
+uint32_t noticeShownSeq=0xffffffffUL;
 bool colorTestActive = false;
 bool otaScreenActive = false;
 uint8_t themeChoice = 0; // 0 Cozy Day / 1 Midnight / 2 Auto by local NTP hour.
@@ -363,6 +364,7 @@ void drawHeaderStatus() {
 }
 
 void drawPageFrame() {
+  noticeShownSeq=0xffffffffUL;
   // Full-screen redraw is allowed here ONLY when opening/changing a page.
   tft.fillScreen(BG);
   tft.fillRoundRect(9, 7, 226, 30, 15, PAPER);
@@ -383,6 +385,23 @@ void drawPageFrame() {
     tft.fillRoundRect(positions[i], 211, 71, 21, 9, active ? MINT : PAPER);
     label(sceneLabel(featured), positions[i] + 11, 217, active ? TEAL : MUTED);
   }
+}
+
+void drawDeskNotice(uint32_t now) {
+  (void)now;
+  const auto *event=pcBridgeActiveEvent();
+  if(event && healthSettings.quiet && event->priority<EventEngine::CRITICAL) event=nullptr;
+  const uint32_t seq=event ? event->seq : 0;
+  if(seq==noticeShownSeq) return;
+  noticeShownSeq=seq;
+  tft.fillRect(12,65,160,9,BG);
+  if(!event) return;
+  char caption[27]; size_t i=0;
+  for(;i<26 && event->message[i];++i) caption[i]=event->message[i]>=32&&event->message[i]<=126 ? event->message[i] : '?';
+  caption[i]=0;
+  tft.setFont(&lgfx::fonts::Font0);tft.setTextSize(1);tft.setTextWrap(false);
+  tft.setTextDatum(lgfx::textdatum_t::top_left);tft.setTextColor(event->priority>=EventEngine::WARNING ? CORAL : MUTED);
+  tft.setCursor(12,65);tft.print(caption);
 }
 
 // RGB565 crossfade between mood sprites, done inside the SAME DMA strips.
@@ -1445,6 +1464,7 @@ void loop() {
 
   if ((uint32_t)(now - lastPetTickMs) >= 250UL) {
     lastPetTickMs = now;
+    drawDeskNotice(now);
     tm timeInfo{};
     const bool night = realClock(timeInfo) && (timeInfo.tm_hour >= 23 || timeInfo.tm_hour < 7);
     CatBehavior::Context context{};
