@@ -12,6 +12,8 @@ Giữ đường dẫn cấu hình, namespace NVS, hostname, khoá Registry và �
 
 Giữ PySide6 và phần giao tiếp hiện có để tập trung vào chất lượng vận hành. Tách lớp `MainWindow` thành các màn hình, model trạng thái và service kết nối/cập nhật; tránh đổi framework trong cùng lượt chuẩn hoá sản phẩm.
 
+**Tiến độ v2.12-dev:** đã thêm khoá một phiên GUI/đánh thức cửa sổ, service nhạc cục bộ độc lập, chọn phiên media và backoff kết nối/tìm lại địa chỉ theo device ID. Đã xác nhận Spotify và ảnh bìa trong Qt thật; còn nghiệm thu đổi IP trên bo và EXE trên Windows sạch. Xem [chi tiết triển khai](DESKTOP_STABILITY_V212.md). Các mục trong bảng dưới là tiêu chí toàn đợt, không phải tất cả còn chưa làm.
+
 | Ưu tiên | Công việc | Điều kiện nghiệm thu |
 |---|---|---|
 | P0 | Kiểm kê thao tác và thông báo; thống nhất tên sản phẩm, tiếng Việt, trạng thái | Không còn tiêu đề đánh số, khẩu hiệu thử nghiệm hoặc thông tin giao thức trên màn hình chính; DEMO luôn được ghi rõ khi dùng dữ liệu mô phỏng |

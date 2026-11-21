@@ -1,6 +1,6 @@
 # Tình hình phát triển mimi.desk
 
-Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển khai theo các mốc đến v2.11-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
+Cập nhật ngày 21/11/2026. Phần lõi firmware đã được triển khai đến v2.11-dev, Windows Companion đến v2.12-dev. Các bản dev được kiểm thử và push theo từng mốc; việc nghiệm thu trên thiết bị tách riêng với kết quả chạy trên máy tính.
 
 | Mốc | Đã có trong mã nguồn | Giới hạn còn lại |
 |---|---|---|
@@ -18,6 +18,7 @@ Cập nhật ngày 21/11/2026. Phần lõi phần mềm đã được triển kh
 | v2.9 | Ba kênh dữ liệu ngoài có TTL, widget Data 1–3, SDK Python/CLI | Chưa tự kết nối lịch, thời tiết, Home Assistant hay tài khoản bên ngoài |
 | v2.10 | Music TFT rộng 304×160, ảnh bìa 120px, font tiếng Việt và cắt UTF-8; Music Web/Windows lớn hơn | Nguồn ảnh vẫn 64×64; cần nghiệm thu TFT và bản Windows cuối trên máy thật |
 | v2.11 | Tên hiển thị mimi.desk, Web/Python cùng hướng ấm áp/gọn, điều hướng theo tác vụ, Chẩn đoán thu gọn và chiều cao theo trang | OTA server mới ở mức đề xuất; chưa tự tải firmware hoặc cập nhật EXE |
+| Windows v2.12 | Một phiên GUI, nhạc cục bộ độc lập với ESP32, tìm phiên media, backoff và tìm lại đúng device ID | Đã đọc Spotify/ảnh bìa thật; còn nghiệm thu đổi IP bo và EXE trên Windows sạch. Firmware vẫn v2.11-dev |
 
 ## Bằng chứng kiểm thử
 
@@ -40,5 +41,7 @@ Lần đọc trạng thái ngày 21/11/2026 từ `192.168.0.107` cho biết firm
 Phần v3.0 còn lại gồm điều khiển nhiều thiết bị đồng thời, driver cho màn hình khác, theme/animation pack độc lập và các adapter tích hợp cụ thể. `.meocat` v3 có nén, bộ ảnh mới, cảm ứng, cảm biến và âm thanh cần một lượt thiết kế/nghiệm thu riêng; chưa thay phân vùng Flash hoặc bootloader cho các mục này. Các bước hardening bảo mật tiếp tục để sau theo yêu cầu hiện tại.
 
 ## Đợt chuẩn hoá sản phẩm tiếp theo
+
+[Đợt desktop v2.12](DESKTOP_STABILITY_V212.md) đã hoàn thành phần vận hành app/nhạc với 37 kiểm thử tập trung và chạy provider trong Qt thật. Môi trường phát triển đã có WinRT; thiếu dependency này là nguyên nhân bổ sung khiến bản thật trước đó không đọc Spotify. Chưa dựng OTA server hoặc deploy firmware.
 
 [Kế hoạch desktop và OTA](PRODUCTION_PLAN.md) đề xuất tên MiuDesk/MiuDesk Studio, nội dung giao diện, điều hướng, vòng đời kết nối và cải tiến cập nhật. Tên hiển thị mimi.desk đã được chốt và áp dụng. Định danh kỹ thuật cũ giữ để tương thích; bản dev chưa được gắn nhãn stable. Xem [phạm vi redesign](REDESIGN_V211.md) và [đề xuất OTA server](SERVER_OTA_PROPOSAL.md).

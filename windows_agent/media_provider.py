@@ -12,9 +12,35 @@ import unicodedata
 from typing import Any
 
 
-def unavailable() -> dict[str, Any]:
+def unavailable(reason="no_session") -> dict[str, Any]:
     return {"available": False, "title": "", "artist": "", "album": "",
-            "playing": False, "position_ms": 0, "duration_ms": 0, "source": "windows_smtc"}
+            "playing": False, "position_ms": 0, "duration_ms": 0, "source": "windows_smtc",
+            "reason": reason}
+
+
+def _select_session(manager):
+    """Retain Windows' active player; recover from an empty/stale current session."""
+    try:
+        current = manager.get_current_session()
+    except Exception:
+        current = None
+    try:
+        sessions = list(manager.get_sessions())
+    except Exception:
+        sessions = []
+    candidates = ([current] if current is not None else []) + sessions
+    ranked = []
+    for order, session in enumerate(candidates):
+        try:
+            playback = session.get_playback_info()
+            status = int(playback.playback_status) if playback else 0
+            if status not in (2, 3, 4, 5, 6):
+                continue
+            spotify = "spotify" in str(getattr(session, "source_app_user_model_id", "")).lower()
+            ranked.append(((status == 4, session is current, spotify, -order), session))
+        except Exception:
+            continue  # One closed session must not hide the remaining players.
+    return max(ranked, key=lambda item: item[0])[1] if ranked else None
 
 
 async def _get_session():
@@ -25,7 +51,7 @@ async def _get_session():
         from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
 
     manager = await GlobalSystemMediaTransportControlsSessionManager.request_async()
-    return manager.get_current_session()
+    return _select_session(manager)
 
 
 async def _snapshot() -> dict[str, Any]:
@@ -52,7 +78,12 @@ async def _snapshot() -> dict[str, Any]:
             "album": unicodedata.normalize("NFC", str(props.album_title or ""))[:75],
             "playing": is_playing,
             "position_ms": max(0, position - start), "duration_ms": max(0, end - start),
-            "source": "windows_smtc", "sampled_at": int(time.time())}
+            "source": "windows_smtc", "player_id": str(getattr(session, "source_app_user_model_id", ""))[:160],
+            "sampled_at": int(time.time())}
+
+
+async def _bounded_snapshot():
+    return await asyncio.wait_for(_snapshot(), timeout=2.0)
 
 
 async def _control(action: str) -> bool:
@@ -69,18 +100,24 @@ async def _control(action: str) -> bool:
 
 def snapshot() -> dict[str, Any]:
     try:
-        return asyncio.run(_snapshot())
+        return asyncio.run(_bounded_snapshot())
+    except ImportError:
+        return unavailable("missing_provider")
     except Exception:  # Optional Windows/COM provider must never stop CPU telemetry.
-        return unavailable()
+        return unavailable("provider_error")
 
 
 def control(action: str) -> bool:
     if action not in {"play_pause", "next", "previous"}:
         return False
     try:
-        return asyncio.run(_control(action))
+        return asyncio.run(_bounded_control(action))
     except Exception:
         return False
+
+
+async def _bounded_control(action):
+    return await asyncio.wait_for(_control(action), timeout=2.0)
 
 
 async def _thumbnail_bytes(expected_title: str, expected_artist: str) -> bytes | None:
@@ -114,6 +151,10 @@ async def _thumbnail_bytes(expected_title: str, expected_artist: str) -> bytes |
     return bytes(buffer)
 
 
+async def _bounded_thumbnail(title, artist):
+    return await asyncio.wait_for(_thumbnail_bytes(title, artist), timeout=2.0)
+
+
 def artwork_rgb565(snapshot: dict[str, Any]) -> bytes | None:
     """Windows thumbnail -> exact 64x64 little-endian RGB565 frame.
 
@@ -124,8 +165,8 @@ def artwork_rgb565(snapshot: dict[str, Any]) -> bytes | None:
         return None
     try:
         from PIL import Image, ImageOps
-        raw = asyncio.run(_thumbnail_bytes(str(snapshot.get("title", "")),
-                                           str(snapshot.get("artist", ""))))
+        raw = asyncio.run(_bounded_thumbnail(str(snapshot.get("title", "")),
+                                             str(snapshot.get("artist", ""))))
         if not raw:
             return None
         with Image.open(io.BytesIO(raw)) as original:

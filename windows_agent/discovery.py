@@ -50,6 +50,7 @@ def probe(host: str, timeout: float = 0.6) -> dict | None:
         if not isinstance(body, dict) or body.get("device") != "MEO DESK":
             return None
         return {"host": host, "ip": body.get("ip", host), "version": body.get("version", "?"),
+                "device_id": str(body.get("device_id") or ""),
                 "name": body.get("device", "MEO DESK"), "pc_connected": bool(body.get("pc_connected"))}
     except (OSError, ValueError, TimeoutError, json.JSONDecodeError, KeyError):
         return None

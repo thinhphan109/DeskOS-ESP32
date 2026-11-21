@@ -16,6 +16,7 @@ from urllib.request import Request, ProxyHandler, build_opener
 from pc_agent import NvidiaGpu, collect_real, psutil, send_json, target_url
 import media_provider
 import discovery
+from connection_state import RetryBackoff
 
 
 _http = build_opener(ProxyHandler({}))
@@ -73,6 +74,7 @@ class Settings:
     media: bool = True
     start_minimized: bool = False
     break_reminders: bool = False
+    device_id: str = ""
 
 
 def user_config_path() -> Path:
@@ -88,6 +90,8 @@ def read_settings(path: Path | None = None) -> Settings:
         raw = json.loads(path.read_text(encoding="utf-8"))
         allowed = {key: raw[key] for key in Settings.__dataclass_fields__ if key in raw}
         result = Settings(**allowed)
+        if not isinstance(result.device_id, str) or len(result.device_id) > 64:
+            return Settings()
         if any(type(getattr(result,key)) is not bool for key in ("media","start_minimized","break_reminders")):
             return Settings()
         if not 0.5 <= result.interval <= 5.0 or result.gpu not in ("auto", "nvidia", "lhm", "none"):
@@ -133,10 +137,11 @@ class CompanionWorker:
     """
 
     def __init__(self, settings: Settings, key: str,
-                 on_update: Callable[[dict], None] | None = None) -> None:
+                 on_update: Callable[[dict], None] | None = None, *, media_source=None) -> None:
         self.settings = settings
         self.key = key
         self.on_update = on_update or (lambda _: None)
+        self.media_source = media_source
         self._stop = threading.Event()
         self._paused = threading.Event()
         self._thread: threading.Thread | None = None
@@ -180,6 +185,7 @@ class CompanionWorker:
         if self._stop.is_set(): return
         try:
             result = json_request(host, "/api/v1/commands", self.key)
+            if self._stop.is_set(): return
             command = result.get("command")
             if not isinstance(command, dict):
                 return
@@ -191,12 +197,14 @@ class CompanionWorker:
             # not toggle playback again.
             self._last_seq = seq
             ok = media_provider.control(action)
+            if self._stop.is_set(): return
             json_request(host, "/api/v1/commands/ack", self.key,
                          {"seq": seq, "ok": ok}, timeout=1.2)
         except (HTTPError, URLError, OSError, ValueError, TimeoutError):
             pass  # v0.7.x firmware has no command endpoint
 
     def _poll_focus(self, host: str) -> None:
+        if self._stop.is_set(): return
         try:
             result = json_request(host, "/api/v1/focus", timeout=0.9)
             if result.get("schema") == 1:
@@ -206,6 +214,7 @@ class CompanionWorker:
 
     def _poll_motion(self, host: str) -> None:
         """Optional v1.7 read-only status, sampled only every five seconds."""
+        if self._stop.is_set(): return
         try:
             result = json_request(host, "/api/v1/status", timeout=0.9)
             if result.get("motion_state") and result.get("motion_style") in (0, 1, 2):
@@ -221,6 +230,8 @@ class CompanionWorker:
         last_status = 0.0
         last_motion = 0.0
         host = settings.host
+        retry = RetryBackoff(initial=settings.interval)
+        verified_device_id = ""
         try:
             while not self._stop.is_set():
                 if self._reset_session.is_set():
@@ -232,26 +243,42 @@ class CompanionWorker:
                     self._stop.wait(0.25)
                     continue
                 started = time.monotonic()
+                if not retry.ready(started):
+                    self._stop.wait(min(settings.interval, retry.next_at - started))
+                    continue
                 try:
+                    if settings.device_id and verified_device_id != settings.device_id:
+                        identity = json_request(host, "/api/status", timeout=1.0)
+                        if identity.get("device_id") != settings.device_id:
+                            raise ValueError("device_mismatch")
+                        verified_device_id = settings.device_id
+                    if self._stop.is_set(): break
                     data = collect_real(nvml, settings.gpu, "http://127.0.0.1:8085/data.json")
                     if self._stop.is_set(): break
                     result = send_json(target_url(host), self.key, data, timeout=1.3)
                     if self._stop.is_set(): break
                     if result.get("ok") is not True:
                         raise ValueError("Thiết bị từ chối dữ liệu")
+                    retry.reset()
                     self._emit({"type": "telemetry", "data": data, "host": host,
                                 "emotion": result.get("emotion", "healthy")})
                     if settings.media and started >= next_media:
                         next_media = started + 2.0
-                        song = media_provider.snapshot()
+                        media_source = self.media_source
+                        if media_source:
+                            song, cached_pixels = media_source()
+                        else:
+                            song, cached_pixels = media_provider.snapshot(), None
                         if self._stop.is_set(): break
-                        self._emit({"type": "media", "data": song})
+                        if not media_source:
+                            self._emit({"type": "media", "data": song})
                         song_id = media_artwork_id(song)
                         if song_id != self._current_song_id:
                             self._current_song_id = song_id
                             self._last_artwork_id = ""
                             self._artwork_next_try = 0.0
-                            self._emit({"type": "artwork", "pixels": None, "id": song_id})
+                            if not media_source:
+                                self._emit({"type": "artwork", "pixels": None, "id": song_id})
                         try:
                             # Paused/unchanged metadata also needs a heartbeat;
                             # otherwise ESP media expires while Windows keeps
@@ -263,12 +290,15 @@ class CompanionWorker:
                             # Optional provider: a missing thumbnail means N/A.
                             # Only ever extract once per track unless a network
                             # upload failed (retry with a 15s backoff).
-                            self._artwork_next_try = started + 15.0
-                            pixels = media_provider.artwork_rgb565(song)
+                            pixels = cached_pixels if media_source else media_provider.artwork_rgb565(song)
+                            if self._stop.is_set(): break
                             if pixels is None:
-                                self._last_artwork_id = song_id
+                                if not media_source:
+                                    self._last_artwork_id = song_id
                             else:
-                                self._emit({"type": "artwork", "pixels": pixels, "id": song_id})
+                                self._artwork_next_try = started + 15.0
+                                if not media_source:
+                                    self._emit({"type": "artwork", "pixels": pixels, "id": song_id})
                                 try:
                                     reply = post_artwork(host, self.key, song_id, pixels)
                                     if reply.get("ok"):
@@ -284,10 +314,17 @@ class CompanionWorker:
                         last_motion = started
                         self._poll_motion(host)
                 except HTTPError as exc:
+                    verified_device_id = ""
+                    delay = retry.failed(started)
                     self._emit({"type": "error", "message":
-                                "Sai pairing key (401)" if exc.code == 401 else f"ESP32 HTTP {exc.code}"})
+                                "Mã ghép nối chưa đúng. Kiểm tra lại trong Thiết bị." if exc.code == 401
+                                else f"Thiết bị chưa phản hồi. Sẽ thử lại sau {delay:g} giây.",
+                                "host": host, "retry_in": delay, "code": exc.code})
                 except (URLError, OSError, ValueError, TimeoutError) as exc:
-                    self._emit({"type": "error", "message": f"Không thể kết nối {host}: {str(exc)[:65]}"})
+                    verified_device_id = ""
+                    delay = retry.failed(started)
+                    self._emit({"type": "error", "host": host, "retry_in": delay,
+                                "message": f"Chưa liên lạc được với thiết bị. Sẽ thử lại sau {delay:g} giây."})
                 self._stop.wait(max(0.0, settings.interval - (time.monotonic() - started)))
         finally:
             nvml.close()

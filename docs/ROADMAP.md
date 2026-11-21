@@ -98,3 +98,12 @@ The [desktop and OTA plan](PRODUCTION_PLAN.md) proposes product naming, user-fac
 The owner selected **mimi.desk** and a warm, compact, modern Web/Python UI. The new shell, task navigation, collapsed diagnostics and current-page desktop sizing are implemented; see [redesign scope](REDESIGN_V211.md). Focused checks replace a full suite for this development slice. Existing protocol/configuration identifiers remain compatible.
 
 The [server OTA proposal](SERVER_OTA_PROPOSAL.md) records the two selected policies, a single active update with a coalesced latest target, shared update coordination and a one-time bridge from the current firmware. Hosting, reader implementation and actual deployment remain separate work.
+
+## Windows v2.12 desktop stability
+
+Single-instance activation, independent local music polling, media-session discovery,
+bounded reconnect and identity-matched rediscovery are implemented. Real Spotify
+metadata/artwork were rendered in Qt with no device configured. See
+[desktop stability](DESKTOP_STABILITY_V212.md) for 37 focused checks and remaining
+acceptance work. Firmware source stays at v2.11-dev; server OTA implementation,
+updated EXE packaging and hardware deployment remain subsequent milestones.

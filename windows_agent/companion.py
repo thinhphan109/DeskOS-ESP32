@@ -46,6 +46,9 @@ from app_version import VERSION
 
 from ui_theme import QSS, ContentStack, Disclosure, nav_icon
 from ui_controls import ScrollSafeComboBox, ScrollSafeSpinBox
+from connection_state import RetryBackoff
+from media_monitor import MediaMonitor
+from single_instance import SingleInstance
 
 
 
@@ -109,13 +112,21 @@ class Bus(QObject):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, preview: bool = False) -> None:
+    def __init__(self, preview: bool = False, *, start_services: bool = True) -> None:
         super().__init__()
         self.preview_mode = preview
         self._closing = False
         self.settings = Settings() if preview else read_settings()
         self.key = secret_store.load(self.settings.host) if self.settings.host else ""
         self.worker: CompanionWorker | None = None
+        self.media_monitor = None
+        self._media_generation = 0
+        self._start_services = start_services
+        self._state_retry = RetryBackoff()
+        self._socket_retry = RetryBackoff()
+        self._rediscovery_pending = False
+        self._pairing_rejected = False
+        self._next_rediscovery = time.monotonic() + 15
         self._last_cat_emotion = ""
         self.state_cursor = StateCursor()
         self.focus_display = FocusDisplay()
@@ -240,10 +251,12 @@ class MainWindow(QMainWindow):
             self.preview_graph_timer.timeout.connect(lambda:self.pc_chart.add({"demo":True,"cpu_percent":25,"gpu_percent":14,"ram_percent":60},"preview"))
             self.preview_graph_timer.start(1000)
             self.set_tab(0)
+        if not preview and start_services:
+            self.configure_media_monitor()
         if self.settings.host:
             self.host_edit.setText(self.settings.host)
             self.update_from_worker({"type": "state", "message": "Đang khởi tạo kết nối tự động..."})
-            if self.key:
+            if self.key and start_services:
                 QTimer.singleShot(250, self.start_agent)
             else:
                 self.update_from_worker({"type": "state", "message": "Nhập pairing key ở tab Thiết bị để bắt đầu"})
@@ -269,6 +282,22 @@ class MainWindow(QMainWindow):
         self.preview_notice.setText(
             "Đã yêu cầu mở mimi.desk ở cửa sổ riêng. Trong cửa sổ mới, vào Thiết bị để kết nối. "
             "Cửa sổ này vẫn là DEMO và không đọc Spotify.")
+
+    def configure_media_monitor(self) -> None:
+        desired = not self.preview_mode and self._start_services and self.settings.media
+        if desired == bool(self.media_monitor):
+            return
+        self._media_generation += 1
+        if self.media_monitor:
+            self.media_monitor.stop()
+            self.media_monitor = None
+        if desired:
+            generation = self._media_generation
+            self.media_monitor = MediaMonitor(lambda event: self.bus.status.emit(
+                dict(event, media_generation=generation)))
+            self.media_monitor.start()
+        if self.worker:
+            self.worker.media_source = self.media_monitor.snapshot if self.media_monitor else None
 
     def heading(self, root: QVBoxLayout, eyebrow: str, heading: str, sub: str) -> None:
         root.addWidget(text(heading, "title"))
@@ -1039,7 +1068,7 @@ class MainWindow(QMainWindow):
     def refresh_device_state(self) -> None:
         if self.preview_mode:
             return
-        if self._state_request_pending or not self.settings.host:
+        if self._state_request_pending or not self.settings.host or not self._state_retry.ready(time.monotonic()):
             return
         self._state_request_pending = True
         host = self.settings.host
@@ -1049,7 +1078,7 @@ class MainWindow(QMainWindow):
                 data = json_request(host, "/api/status", timeout=1.0)
                 self.bus.status.emit({"type": "device_state", "data": data, "source": "http", "host": host})
             except (OSError, ValueError, TimeoutError):
-                pass
+                self.bus.status.emit({"type": "state_error", "host": host})
             finally:
                 self._state_request_pending = False
 
@@ -1062,7 +1091,7 @@ class MainWindow(QMainWindow):
         self.sync_label.setText("HTTP · đang kết nối lại")
 
     def maintain_state_link(self) -> None:
-        if not self.settings.host:
+        if self._closing or self.preview_mode or not self._start_services or not self.settings.host:
             return
         if self._stream_host != self.settings.host:
             self._stream_host = self.settings.host
@@ -1070,6 +1099,8 @@ class MainWindow(QMainWindow):
             self.state_cursor = StateCursor()
             self._stream_seen_at = 0.0
             self.state_socket.abort()
+            self._state_retry.reset()
+            self._socket_retry.reset()
         fresh = self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5
         if self.worker:
             self.worker.stream_active = bool(fresh)
@@ -1078,11 +1109,37 @@ class MainWindow(QMainWindow):
             self.refresh_device_state()
             if self.state_socket.state() == QAbstractSocket.SocketState.ConnectedState:
                 self.state_socket.abort()
-            if self._stream_supported and self.state_socket.state() == QAbstractSocket.SocketState.UnconnectedState:
+            if (self._stream_supported and self.state_socket.state() == QAbstractSocket.SocketState.UnconnectedState
+                    and self._socket_retry.ready(time.monotonic())):
+                self._socket_retry.failed(time.monotonic())
                 self.state_socket.open(QUrl(f"ws://{self.settings.host}:81/"))
+            self.rediscover_device()
+
+    def rediscover_device(self) -> None:
+        if (not self.settings.device_id or self._rediscovery_pending
+                or time.monotonic() < self._next_rediscovery
+                or (self.device_seen_at and time.monotonic() - self.device_seen_at < 10)):
+            return
+        self._next_rediscovery = time.monotonic() + 30
+        self._rediscovery_pending = True
+        host, device_id = self.settings.host, self.settings.device_id
+
+        def search():
+            try:
+                for item in discovery.discover(host, lan_scan=False):
+                    if item.get("device_id") == device_id and item["host"] != host:
+                        self.bus.status.emit({"type": "device_relocated", "host": host,
+                                              "device_id": device_id, "new_host": item["host"]})
+                        break
+            except (OSError, ValueError):
+                pass
+            finally:
+                self._rediscovery_pending = False
+
+        threading.Thread(target=search, name="MimiDeskRediscovery", daemon=True).start()
 
     def receive_socket_state(self, message: str) -> None:
-        if len(message) > 32768:
+        if self._stream_host != self.settings.host or len(message) > 32768:
             return
         try:
             data = json.loads(message)
@@ -1090,7 +1147,7 @@ class MainWindow(QMainWindow):
             return
         if not isinstance(data, dict) or data.get("type") != "state":
             return
-        self.update_from_worker({"type": "device_state", "data": data, "source": "socket"})
+        self.update_from_worker({"type": "device_state", "data": data, "source": "socket", "host": self._stream_host})
 
     def tick_focus_display(self) -> None:
         self.refresh_connection_badge()
@@ -1101,8 +1158,8 @@ class MainWindow(QMainWindow):
             self.focus_clock.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
 
     def refresh_connection_badge(self) -> None:
-        live=self.device_seen_at>0 and time.monotonic()-self.device_seen_at<6
-        caption="Xem trước · mô phỏng" if self.preview_mode else "Đã kết nối" if live else "Mất kết nối" if self.device_seen_at else "Đang kết nối…" if self.settings.host else "Chưa có thiết bị"
+        live=self.device_seen_at>0 and time.monotonic()-self.device_seen_at<6 and not self._pairing_rejected
+        caption="Xem trước · mô phỏng" if self.preview_mode else "Kiểm tra mã ghép nối" if self._pairing_rejected else "Đã kết nối" if live else "Mất kết nối" if self.device_seen_at else "Đang kết nối…" if self.settings.host else "Chưa có thiết bị"
         if self.connection_badge.text()!=caption:
             self.connection_badge.setText(caption)
             self.connection_badge.setProperty("live",live and not self.preview_mode)
@@ -1259,7 +1316,38 @@ class MainWindow(QMainWindow):
             nav.style().polish(nav)
 
     def update_from_worker(self, event: dict) -> None:
+        if self._closing:
+            return
+        if "media_generation" in event and event["media_generation"] != self._media_generation:
+            return
         kind = event.get("type")
+        if kind == "state_error":
+            if event.get("host") == self.settings.host:
+                self._state_retry.failed(time.monotonic())
+            return
+        if kind == "device_relocated":
+            if event.get("host") != self.settings.host or event.get("device_id") != self.settings.device_id:
+                return
+            self.settings.host = discovery.normalize_host(event["new_host"])
+            self.state_socket.abort()
+            self._stream_host = ""
+            self._stream_seen_at = 0.0
+            self._state_retry.reset()
+            self._socket_retry.reset()
+            self.host_edit.setText(self.settings.host)
+            if self.key:
+                secret_store.save(self.settings.host, self.key)
+            write_settings(self.settings)
+            # Preserve a deliberately paused agent after an address change.
+            running = self.worker is not None and self.worker.running
+            if self.worker:
+                self.worker.stop()
+                self.worker = None
+            if running:
+                self.start_agent()
+            self.device_seen_at = 0.0
+            self.hint.setText("Đã tìm lại thiết bị. Đang kết nối lại…")
+            return
         if kind in ("rules_result","rules_error"):
             if event.get("host")!=self.settings.host:return
             self.rules_pending=False
@@ -1296,6 +1384,14 @@ class MainWindow(QMainWindow):
             if event.get("source") == "http" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
             data = event["data"]
+            device_id = str(data.get("device_id") or "")[:64]
+            if not self.preview_mode and self.settings.device_id and device_id and device_id != self.settings.device_id:
+                self.hint.setText("Địa chỉ này đang thuộc thiết bị khác. Đang tìm lại thiết bị đã ghép nối.")
+                return
+            self._state_retry.reset()
+            if not self.preview_mode and device_id and not self.settings.device_id:
+                self.settings.device_id = device_id
+                write_settings(self.settings)
             old_boot = self.state_cursor.boot
             if not self.state_cursor.accept(data):
                 return
@@ -1322,6 +1418,7 @@ class MainWindow(QMainWindow):
             else:
                 self.lab_live.setText("Performance Lab · đang chờ cửa sổ đo" if data.get("lab_enabled") else "Performance Lab · chưa bật đo")
             if event.get("source") == "socket":
+                self._socket_retry.reset()
                 self._stream_seen_at = time.monotonic()
                 self.sync_label.setText("WebSocket · đồng bộ trực tiếp")
             self.device_seen_at=time.monotonic()
@@ -1342,6 +1439,8 @@ class MainWindow(QMainWindow):
             if isinstance(data.get("media"), dict):
                 self.update_from_worker({"type": "media", "data": data["media"], "source": "state"})
         elif kind == "telemetry":
+            if event.get("source") != "state":
+                self._pairing_rejected = False
             if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
             data = event["data"]
@@ -1353,10 +1452,12 @@ class MainWindow(QMainWindow):
             gpu = data.get("gpu_temp_c")
             self.temps.setText(f"{cpu:.0f}° / {gpu:.0f}°" if cpu is not None and gpu is not None
                                else f"{gpu:.0f}° GPU" if gpu is not None else "N/A")
-            self.state.setText("DEMO · XEM TRƯỚC" if self.preview_mode else "● ĐÃ KẾT NỐI")
+            self.state.setText("DEMO · XEM TRƯỚC" if self.preview_mode else "Kiểm tra mã ghép nối" if self._pairing_rejected else "● ĐÃ KẾT NỐI")
             self.set_cat_mood(event.get("emotion", "healthy"))
             mode = "DEMO / mô phỏng" if data.get("demo") else "Dữ liệu thực"
-            self.hint.setText("Đang xem dữ liệu mô phỏng." if data.get("demo") else "Máy tính và thiết bị đang đồng bộ.")
+            self.hint.setText("Đang xem dữ liệu mô phỏng." if data.get("demo") else
+                              "Kiểm tra lại mã ghép nối trong Thiết bị." if self._pairing_rejected else
+                              "Máy tính và thiết bị đang đồng bộ.")
             up = data.get("net_up_kbps")
             down = data.get("net_down_kbps")
             used = data.get("vram_used_gb")
@@ -1366,7 +1467,9 @@ class MainWindow(QMainWindow):
                                        f"   ·   VRAM {value(used)} / {value(total)} GB")
             self.tray.setToolTip("mimi.desk · Trực tuyến")
         elif kind == "media":
-            if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
+            if event.get("source") == "state" and self.media_monitor:
+                return
+            if event.get("source") not in ("state", "local") and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
             media = event["data"]
             self.media_display.update(media)
@@ -1376,7 +1479,12 @@ class MainWindow(QMainWindow):
                 self.tick_media_display()
             else:
                 self.song.setText("Chưa có bản nhạc")
-                self.artist.setText("Trình phát chưa cung cấp Windows Media Session")
+                self.artist.setText({
+                    "starting": "Đang tìm trình phát trên máy tính…",
+                    "missing_provider": "Thiếu thành phần đọc nhạc Windows. Cài lại bản mimi.desk đầy đủ.",
+                    "provider_error": "Chưa đọc được nhạc từ Windows. Hãy thử phát nhạc lại; app sẽ tự kiểm tra tiếp.",
+                    "disabled": "Đã tắt đọc nhạc. Bật lại trong Cài đặt để tiếp tục.",
+                }.get(media.get("reason"), "Mở Spotify hoặc trình phát trên PC và phát một bản nhạc."))
                 self.progress.setValue(0)
                 self.music_state.setText("KHÔNG CÓ DỮ LIỆU / N/A")
         elif kind == "artwork":
@@ -1439,9 +1547,14 @@ class MainWindow(QMainWindow):
         elif kind == "motion_error":
             self.pack_motion_status.setText(event.get("message", "Không điều khiển được chuyển động"))
         else:
+            if event.get("host", self.settings.host) != self.settings.host:
+                return
             message = event.get("message", "Đang chờ thiết bị")
             self.hint.setText(message)
             if kind == "error":
+                if event.get("code") == 401:
+                    self._pairing_rejected = True
+                self.refresh_connection_badge()
                 self.state.setText("○ CHƯA KẾT NỐI")
                 self.set_cat_mood("rescue")
                 self.tray.setToolTip("mimi.desk · Ngoại tuyến")
@@ -1469,6 +1582,8 @@ class MainWindow(QMainWindow):
             self.hint.setText(str(exc))
             self.set_tab(0)
             return
+        if host != self.settings.host:
+            self.settings.device_id = ""
         self.settings.host = host
         self.key = self.key_edit.text().strip()
         write_settings(self.settings)
@@ -1508,7 +1623,8 @@ class MainWindow(QMainWindow):
             return
         if self.worker is not None:
             self.worker.stop()
-        self.worker = CompanionWorker(self.settings, self.key, self.bus.status.emit)
+        self.worker = CompanionWorker(self.settings, self.key, self.bus.status.emit,
+                                      media_source=self.media_monitor.snapshot if self.media_monitor else None)
         self.worker.start()
         self.agent_button.setText("Ⅱ  TẠM DỪNG TRUYỀN DỮ LIỆU")
 
@@ -1565,7 +1681,12 @@ class MainWindow(QMainWindow):
         self.settings.media = self.media_check.isChecked()
         self.settings.start_minimized = self.min_check.isChecked()
         write_settings(self.settings)
-        self.hint.setText("Đã lưu cài đặt. Khởi động lại stream để áp dụng.")
+        self.configure_media_monitor()
+        if not self.settings.media:
+            self.update_from_worker({"type": "media", "source": "local",
+                                     "data": {"available": False, "reason": "disabled"}})
+            self.update_from_worker({"type": "artwork", "pixels": None})
+        self.hint.setText("Đã lưu cài đặt.")
 
     def open_web(self) -> None:
         host = self.settings.host
@@ -1576,6 +1697,7 @@ class MainWindow(QMainWindow):
 
     def show_window(self) -> None:
         self.showNormal()
+        self.raise_()
         self.activateWindow()
 
     def closeEvent(self, event) -> None:
@@ -1593,6 +1715,8 @@ class MainWindow(QMainWindow):
         self.state_socket.abort()
         if self.worker is not None:
             self.worker.stop()
+        if self.media_monitor is not None:
+            self.media_monitor.stop()
         self.tray.hide()
         if self.focus_journal is not None: self.focus_journal.close()
         QApplication.instance().quit()
@@ -1602,9 +1726,19 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("mimi.desk")
     app.setQuitOnLastWindowClosed(False)
-    window = MainWindow(preview="--preview" in sys.argv)
-    window.show()
-    return app.exec()
+    instance = SingleInstance(preview="--preview" in sys.argv)
+    try:
+        if not instance.acquire():
+            return 0
+        window = MainWindow(preview="--preview" in sys.argv)
+        instance.activated.connect(window.show_window)
+        window.show()
+        return app.exec()
+    except RuntimeError as error:
+        QMessageBox.critical(None, "mimi.desk", str(error))
+        return 1
+    finally:
+        instance.release()
 
 
 if __name__ == "__main__":

@@ -69,6 +69,65 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             win.quit_app()
 
+    def test_real_mode_starts_local_music_without_a_device_and_ignores_old_state(self):
+        from companion import MainWindow
+        from companion_core import Settings
+        with patch("companion.read_settings", return_value=Settings()), \
+             patch("companion.MediaMonitor") as factory, patch("companion.write_settings"):
+            win = MainWindow()
+            try:
+                factory.return_value.start.assert_called_once()
+                self.assertIsNone(win.worker)
+                win._stream_seen_at = time.monotonic()
+                win.update_from_worker({"type": "media", "source": "local",
+                                        "data": {"available": True, "title": "Nhạc thật", "playing": True}})
+                win.update_from_worker({"type": "media", "source": "state", "data": {"available": False}})
+                self.assertEqual(win.song.text(), "Nhạc thật")
+                win.update_from_worker({"type": "media", "source": "local", "media_generation": 0,
+                                        "data": {"available": False}})
+                self.assertEqual(win.song.text(), "Nhạc thật")
+                win.media_check.setChecked(False)
+                win.save_preferences()
+                factory.return_value.stop.assert_called_once()
+                self.assertIn("Đã tắt", win.artist.text())
+            finally:
+                win.quit_app()
+
+    def test_relocation_requires_same_device_preserves_pause_and_pairing_error(self):
+        from companion import MainWindow
+        from companion_core import Settings
+        from unittest.mock import Mock
+        from PySide6.QtWidgets import QApplication
+        with patch("companion.read_settings", return_value=Settings(host="192.168.0.107", device_id="expected")), \
+             patch("companion.secret_store.load", return_value="test"), \
+             patch("companion.secret_store.save") as vault, patch("companion.write_settings") as save:
+            win = MainWindow(start_services=False)
+            try:
+                paused = Mock(running=False)
+                win.worker = paused
+                win.update_from_worker({"type": "device_relocated", "host": win.settings.host,
+                                        "device_id": "other", "new_host": "meodesk.local"})
+                save.assert_not_called()
+                win.update_from_worker({"type": "device_relocated", "host": win.settings.host,
+                                        "device_id": "expected", "new_host": "meodesk.local"})
+                self.assertEqual(win.settings.host, "meodesk.local")
+                self.assertIsNone(win.worker)
+                paused.stop.assert_called_once()
+                vault.assert_called_once_with("meodesk.local", "test")
+                save.assert_called_once()
+                win.device_seen_at = time.monotonic()
+                win.update_from_worker({"type": "error", "host": win.settings.host, "code": 401})
+                win.refresh_connection_badge()
+                self.assertIn("mã ghép nối", win.connection_badge.text())
+                win.update_from_worker({"type": "state_error", "host": win.settings.host})
+                self.assertFalse(win._state_retry.ready(time.monotonic()))
+                win.quit_app()
+                before = win.song.text()
+                win.update_from_worker({"type": "media", "data": {"available": True, "title": "Late callback"}})
+                self.assertEqual(win.song.text(), before)
+            finally:
+                win.quit_app()
+
     def test_wheel_over_inputs_scrolls_page_without_changing_values(self):
         from PySide6.QtCore import QPoint, QPointF, Qt
         from PySide6.QtGui import QWheelEvent
@@ -270,7 +329,7 @@ class GuiSmokeTests(unittest.TestCase):
         peers = []
         server.newConnection.connect(lambda: peers.append(server.nextPendingConnection()))
         with patch("companion.read_settings", return_value=Settings()):
-            windows = [MainWindow(), MainWindow()]
+            windows = [MainWindow(start_services=False), MainWindow(start_services=False)]
         try:
             for win in windows:
                 win.state_timer.stop()
@@ -319,7 +378,7 @@ class GuiSmokeTests(unittest.TestCase):
         app = QApplication.instance() or QApplication([])
         from companion_core import Settings
         with patch("companion.read_settings",return_value=Settings()):
-            win = MainWindow()
+            win = MainWindow(start_services=False)
         try:
             for index in range(7):
                 win.set_tab(index)
