@@ -4,7 +4,8 @@ import copy
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-                              QComboBox, QSpinBox, QLineEdit, QPushButton, QFileDialog)
+                              QLineEdit, QPushButton, QFileDialog)
+from ui_controls import ScrollSafeComboBox, ScrollSafeSpinBox
 from scene_layout import DEFAULT_LAYOUT, KINDS, validate_layout, load_layout, save_layout
 
 
@@ -79,8 +80,8 @@ class SceneEditor(QWidget):
         self.canvas = SceneCanvas()
         body.addWidget(self.canvas, 0, Qt.AlignmentFlag.AlignTop)
         form = QGridLayout()
-        self.selection = QComboBox()
-        self.kind = QComboBox()
+        self.selection = ScrollSafeComboBox()
+        self.kind = ScrollSafeComboBox()
         self.kind.addItems(KINDS)
         self.label = QLineEdit()
         self.label.setMaxLength(31)
@@ -90,7 +91,7 @@ class SceneEditor(QWidget):
         form.addWidget(QLabel("Nhãn"),2,0); form.addWidget(self.label,2,1)
         self.fields = {}
         for row, (key, caption, low, high) in enumerate((("x","X",0,161),("y","Y",0,119),("w","Rộng",32,162),("h","Cao",20,120)),3):
-            field = QSpinBox(); field.setRange(low, high); field.setAccessibleName(caption)
+            field = ScrollSafeSpinBox(); field.setRange(low, high); field.setAccessibleName(caption)
             self.fields[key] = field
             form.addWidget(QLabel(caption),row,0); form.addWidget(field,row,1)
             field.valueChanged.connect(self.edit)

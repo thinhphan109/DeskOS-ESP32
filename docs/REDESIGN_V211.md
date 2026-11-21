@@ -29,6 +29,10 @@ Chạy từ source ở thư mục dự án: `.venv/Scripts/pythonw.exe windows_a
 
 Kiểm tra bổ sung: 7 bài smoke GUI đã qua, gồm mở chế độ thật từ source/EXE, chặn nhấn lặp và cho phép thử lại khi không mở được tiến trình. Chưa xác minh phát nhạc Spotify thật; không build lại hoặc OTA firmware cho thay đổi Python này.
 
+## Cuộn trang trên ô chọn
+
+Đã chặn cuộn chuột làm đổi lựa chọn hoặc giá trị số trên app Windows, kể cả khi ô đang có focus. Áp dụng cho cảnh TFT, bốn cảnh yêu thích, các trường Scene Editor và thời lượng tập trung. Cuộn trên ô đóng được chuyển tới trang; danh sách đang mở vẫn cuộn và chọn bằng click như bình thường. Giữ nguyên thao tác bằng bàn phím. Chín kiểm thử GUI đã qua, gồm kiểm tra trang thực sự cuộn, giá trị không đổi, chọn bằng phím và cuộn/chọn trong danh sách mở. Mở lại app để nhận thay đổi; không cần OTA firmware.
+
 ## Chưa triển khai
 
 Chưa OTA lên thiết bị, chưa phát hành binary lên server, chưa tự cập nhật EXE Windows và chưa đổi bootloader/phân vùng. `MeoDesk` trong định danh giao thức, đường dẫn dữ liệu và tên package cũ là tương thích kỹ thuật, không phải tên hiển thị bị bỏ sót.

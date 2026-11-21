@@ -21,8 +21,8 @@ from PySide6.QtNetwork import QAbstractSocket, QNetworkProxy
 from PySide6.QtWebSockets import QWebSocket
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QFileDialog, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QSpinBox,
+    QApplication, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
+    QFileDialog, QLineEdit, QListWidget, QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton,
     QScrollArea, QSizePolicy, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
@@ -45,6 +45,7 @@ from app_version import VERSION
 
 
 from ui_theme import QSS, ContentStack, Disclosure, nav_icon
+from ui_controls import ScrollSafeComboBox, ScrollSafeSpinBox
 
 
 
@@ -482,7 +483,7 @@ class MainWindow(QMainWindow):
         self.focus_plan_dirty = False
         for caption, maximum, initial in (("Làm việc · phút", 180, 25), ("Nghỉ · phút", 60, 5), ("Mục tiêu phiên", 24, 4)):
             column = QVBoxLayout(); column.addWidget(text(caption, "smallLabel"))
-            spin = QSpinBox(); spin.setRange(1, maximum); spin.setValue(initial)
+            spin = ScrollSafeSpinBox(); spin.setRange(1, maximum); spin.setValue(initial)
             spin.valueChanged.connect(lambda _: setattr(self, "focus_plan_dirty", True))
             column.addWidget(spin); fields.addLayout(column); self.focus_inputs.append(spin)
         config_box.addLayout(fields)
@@ -727,7 +728,7 @@ class MainWindow(QMainWindow):
         self.heading(box, "STUDIO", "Studio của bạn",
                      "Cảnh, giao diện và chuyển động lấy trạng thái chung từ ESP32.")
         controls, layout = card()
-        self.studio_scene = QComboBox()
+        self.studio_scene = ScrollSafeComboBox()
         self.scene_names = [(12, "Home"), (0, "PC"), (1, "Đồng hồ"), (2, "Focus"),
                             (3, "Wi-Fi"), (4, "Thiết bị"), (5, "Nhạc"), (6, "Print"),
                             (7, "Audio"), (8, "Moto"), (9, "Ngủ"), (10, "Health"),
@@ -768,7 +769,7 @@ class MainWindow(QMainWindow):
         favorites = QGridLayout()
         self.favorite_scenes = []
         for index in range(4):
-            combo = QComboBox()
+            combo = ScrollSafeComboBox()
             for page, caption in self.scene_names:
                 combo.addItem(caption, page)
             combo.activated.connect(lambda _, slot=index: self.save_scene_favorite(slot))

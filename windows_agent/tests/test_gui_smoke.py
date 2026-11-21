@@ -14,6 +14,95 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "PySide6 optional in CLI-only installation")
 class GuiSmokeTests(unittest.TestCase):
+    def test_wheel_over_inputs_scrolls_page_without_changing_values(self):
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtGui import QWheelEvent
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication, QComboBox, QSpinBox
+        from companion import MainWindow
+        from ui_controls import ScrollSafeComboBox, ScrollSafeSpinBox
+        app = QApplication.instance() or QApplication([])
+        win = MainWindow(preview=True)
+        try:
+            self.assertTrue(all(isinstance(w, ScrollSafeComboBox) for w in win.findChildren(QComboBox)))
+            self.assertTrue(all(isinstance(w, ScrollSafeSpinBox) for w in win.findChildren(QSpinBox)))
+            win.resize(850, 560)
+            win.show()
+            win.set_tab(6)
+            app.processEvents()
+            changed = []
+            combo = win.favorite_scenes[0]
+            combo.setCurrentIndex(2)
+            combo.activated.connect(changed.append)
+            spin = win.scene_editor.fields["x"]
+            spin.setValue(10)
+            bar = win.content_scroll.verticalScrollBar()
+            self.assertGreater(bar.maximum(), 0)
+            for control in (*win.favorite_scenes, win.studio_scene, spin):
+                for focused in (False, True):
+                    with self.subTest(control=type(control).__name__, focused=focused):
+                        if focused:
+                            control.setFocus()
+                        else:
+                            control.clearFocus()
+                        value = control.currentIndex() if isinstance(control, QComboBox) else control.value()
+                        for delta in (120, -120):
+                            bar.setValue(bar.maximum() // 2)
+                            before = bar.value()
+                            pos = control.rect().center()
+                            event = QWheelEvent(QPointF(pos), QPointF(control.mapToGlobal(pos)),
+                                                QPoint(), QPoint(0, delta), Qt.MouseButton.NoButton,
+                                                Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+                            app.sendEvent(control, event)
+                            self.assertEqual(control.currentIndex() if isinstance(control, QComboBox) else control.value(), value)
+                            if delta > 0:
+                                self.assertLess(bar.value(), before)
+                            else:
+                                self.assertGreater(bar.value(), before)
+            self.assertEqual(changed, [])
+            combo.setFocus()
+            QTest.keyClick(combo, Qt.Key.Key_Down)
+            self.assertEqual(combo.currentIndex(), 3)
+            self.assertEqual(changed, [3])
+            QTest.keyClick(spin, Qt.Key.Key_Up)
+            self.assertEqual(spin.value(), 11)
+        finally:
+            win.quit_app()
+
+    def test_open_dropdown_keeps_popup_scrolling_and_click_selection(self):
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtGui import QWheelEvent
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QApplication
+        from ui_controls import ScrollSafeComboBox
+        app = QApplication.instance() or QApplication([])
+        combo = ScrollSafeComboBox()
+        try:
+            combo.addItems([str(i) for i in range(100)])
+            combo.view().setMaximumHeight(120)
+            combo.show()
+            combo.showPopup()
+            app.processEvents()
+            view = combo.view()
+            bar = view.verticalScrollBar()
+            self.assertGreater(bar.maximum(), 0)
+            bar.setValue(bar.maximum() // 2)
+            before = bar.value()
+            pos = view.viewport().rect().center()
+            event = QWheelEvent(QPointF(pos), QPointF(view.viewport().mapToGlobal(pos)),
+                                QPoint(), QPoint(0, 120), Qt.MouseButton.NoButton,
+                                Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+            app.sendEvent(view.viewport(), event)
+            self.assertLess(bar.value(), before)
+            index = view.indexAt(pos)
+            self.assertTrue(index.isValid())
+            QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+            self.assertEqual(combo.currentIndex(), index.row())
+            self.assertFalse(view.isVisible())
+        finally:
+            combo.hidePopup()
+            combo.close()
+
     def test_rule_editor_invalid_draft_and_remote_preservation(self):
         from PySide6.QtWidgets import QApplication
         from rule_editor import RuleEditor
