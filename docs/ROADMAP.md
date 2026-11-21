@@ -58,3 +58,7 @@ Real Windows session idle input drives bounded sleep/wake and once-daily morning
 ## v2.3 source checkpoint
 
 Cozy, Midnight and Auto keep IDs 0/1/2. Cyberpunk, Sakura and Minimal add IDs 3/4/5 across TFT/Web/Windows and portable profiles. Minimal selects Clock when chosen through its control. See [Themes](THEMES_V23.md).
+
+## v2.4 source checkpoint
+
+Music position projection now shares duration/stale rules across TFT/Web/Windows. Existing real SMTC metadata, cover and transport stay in use. See [Music Studio](MUSIC_STUDIO_V24.md). Player-specific acceptance remains pending.

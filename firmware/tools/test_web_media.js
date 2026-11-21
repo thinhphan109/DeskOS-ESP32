@@ -1,0 +1,10 @@
+const assert=require('assert'),fs=require('fs'),vm=require('vm');
+const source=fs.readFileSync(require('path').join(__dirname,'../src/web_ui.h'),'utf8').split('// MEDIA_TIMELINE_BEGIN')[1].split('// MEDIA_TIMELINE_END')[0];
+const project=vm.runInNewContext(source+';projectMedia;');
+const playing={available:true,playing:true,position_ms:1000,duration_ms:3000};
+assert.equal(project(playing,1200),2200);assert.equal(project(playing,3000),3000);
+assert.equal(project({...playing,playing:false},1200),1000);
+assert.equal(project({...playing,position_ms:200},0),200);
+assert.equal(project(playing,3500),null);assert.equal(project({...playing,source_age_ms:9990},20),null);
+assert.equal(project({...playing,available:false},0),null);
+console.log('OK: browser media timeline, pause, seek, end and stale freeze');

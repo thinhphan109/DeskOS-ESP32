@@ -31,7 +31,7 @@ from scene_editor import SceneEditor
 from scene_layout import validate_layout
 import secret_store
 from companion_core import CompanionWorker, Settings, json_request, read_settings, write_settings
-from state_sync import StateCursor, FocusDisplay
+from state_sync import StateCursor, FocusDisplay, MediaDisplay
 from app_version import VERSION
 
 
@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         self._last_cat_emotion = ""
         self.state_cursor = StateCursor()
         self.focus_display = FocusDisplay()
+        self.media_display = MediaDisplay()
         self._state_request_pending = False
         self._stream_seen_at = 0.0
         self._stream_supported = False
@@ -990,9 +991,23 @@ class MainWindow(QMainWindow):
         self.update_from_worker({"type": "device_state", "data": data, "source": "socket"})
 
     def tick_focus_display(self) -> None:
+        self.tick_media_display()
         seconds = self.focus_display.seconds()
         if seconds is not None:
             self.focus_clock.setText(f"{seconds // 60:02d}:{seconds % 60:02d}")
+
+    def tick_media_display(self) -> None:
+        media = self.media_display.state
+        if not media.get("available"): return
+        progress = self.media_display.position()
+        if progress is None:
+            self.music_state.setText("ĐỒNG BỘ NHẠC GIÁN ĐOẠN · đang chờ dữ liệu")
+            return
+        length = int(media.get("duration_ms") or 0)
+        self.progress.setValue(round(100*progress/length) if length else 0)
+        self.music_state.setText(("ĐANG PHÁT" if media.get("playing") else "TẠM DỪNG") +
+                                f" · {progress//60000}:{progress//1000%60:02d}" +
+                                (f" / {length//60000}:{length//1000%60:02d}" if length else " · thời lượng N/A"))
 
     def check_catpack_status(self) -> None:
         if self.preview_mode:
@@ -1214,15 +1229,11 @@ class MainWindow(QMainWindow):
             if event.get("source") != "state" and self._stream_seen_at and time.monotonic() - self._stream_seen_at < 2.5:
                 return
             media = event["data"]
+            self.media_display.update(media)
             if media.get("available"):
                 self.song.setText(media.get("title") or "Không có tên bài")
                 self.artist.setText(media.get("artist") or "Không rõ nghệ sĩ")
-                length = media.get("duration_ms", 0)
-                progress = media.get("position_ms", 0)
-                self.progress.setValue(round(100 * progress / length) if length > 0 else 0)
-                self.music_state.setText(("▶ ĐANG PHÁT" if media.get("playing") else "Ⅱ TẠM DỪNG") +
-                                         f"   ·   {progress // 60000}:{progress // 1000 % 60:02d}" +
-                                         (f" / {length // 60000}:{length // 1000 % 60:02d}" if length > 0 else ""))
+                self.tick_media_display()
             else:
                 self.song.setText("Chưa có bản nhạc")
                 self.artist.setText("Trình phát chưa cung cấp Windows Media Session")

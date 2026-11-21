@@ -792,7 +792,7 @@ void drawCard() {
           label(artist.length() ? artist : "Unknown artist", 19, 143, MUTED);
         }
         const uint32_t duration = pcMedia.durationMs;
-        const uint32_t elapsed = pcMedia.positionMs + (pcMedia.playing ? nowMs - pcMedia.receivedMs : 0);
+        const uint32_t elapsed = pcMedia.positionAt(nowMs);
         // Keep the 64x64 cover (y=107..170) clear of the timeline.
         // In the text-only layout we retain the denser original spacing.
         const int timelineY = art ? 174 : 158;

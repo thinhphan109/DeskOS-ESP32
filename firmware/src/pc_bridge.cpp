@@ -582,9 +582,10 @@ static void sendMedia() {
   doc["available"] = fresh && pcMedia.available;
   doc["playing"] = fresh && pcMedia.playingNow(millis());
   doc["stale"] = !fresh;
+  doc["source_age_ms"]=pcMedia.received ? static_cast<uint32_t>(millis()-pcMedia.receivedMs) : 10000UL;
   doc["title"] = fresh && pcMedia.available ? pcMedia.title : "";
   doc["artist"] = fresh && pcMedia.available ? pcMedia.artist : "";
-  doc["position_ms"] = fresh && pcMedia.available ? pcMedia.positionMs : 0;
+  doc["position_ms"] = fresh && pcMedia.available ? pcMedia.positionAt(millis()) : 0;
   doc["duration_ms"] = fresh && pcMedia.available ? pcMedia.durationMs : 0;
   doc["artwork_id"] = fresh && pcMedia.available ? pcMedia.artworkId : "";
   doc["artwork_ready"] = pcBridgeArtworkReady();
@@ -610,7 +611,8 @@ static void receiveMedia() {
   if (strlen(title) > 64 || strlen(artist) > 48 ||
       (artId[0] && !validArtId(artId)) ||
       !body["position_ms"].is<uint32_t>() || !body["duration_ms"].is<uint32_t>() ||
-      body["duration_ms"].as<uint32_t>() > 86400000UL) {
+      body["duration_ms"].as<uint32_t>() > 86400000UL ||
+      body["position_ms"].as<uint32_t>() > 86400000UL) {
     replyError(400, "media field too long or invalid");
     return;
   }
@@ -1070,10 +1072,11 @@ static void publishState() {
     const uint32_t mediaNow = millis();
     const bool available = pcMedia.fresh(mediaNow) && pcMedia.available;
     media["available"] = available;
+    media["source_age_ms"]=pcMedia.received ? static_cast<uint32_t>(mediaNow-pcMedia.receivedMs) : 10000UL;
     media["playing"] = pcMedia.playingNow(mediaNow);
     media["title"] = available ? pcMedia.title : "";
     media["artist"] = available ? pcMedia.artist : "";
-    media["position_ms"] = available ? pcMedia.positionMs : 0;
+    media["position_ms"] = available ? pcMedia.positionAt(mediaNow) : 0;
     media["duration_ms"] = available ? pcMedia.durationMs : 0;
     media["artwork_id"] = available ? pcMedia.artworkId : "";
     media["artwork_ready"] = pcBridgeArtworkReady();

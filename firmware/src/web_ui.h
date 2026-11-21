@@ -859,14 +859,29 @@ LOCAL-FIRST DEVICE</div><div class="connection"><span class="led" id="liveLed"><
           renderMedia(await res.json());
         }catch(e){}
       }
+      // MEDIA_TIMELINE_BEGIN
+      function projectMedia(data,elapsed){
+        if(!data.available||elapsed>=3500||(data.source_age_ms||0)+elapsed>=10000)return null;
+        const position=Math.max(0,data.position_ms||0)+(data.playing?Math.max(0,elapsed):0);
+        return Math.min(position,data.duration_ms||86400000);
+      }
+      // MEDIA_TIMELINE_END
+      let mediaAnchor=null;
+      function paintMediaTime(){
+        if(!mediaAnchor)return;
+        const data=mediaAnchor.data,position=projectMedia(data,performance.now()-mediaAnchor.at),duration=data.duration_ms||0;
+        if(position===null){$('musicTime').textContent=data.available?'SYNC INTERRUPTED · waiting for media':'NOT AVAILABLE / N-A';return;}
+        $('musicBar').style.width=duration?Math.min(100,Math.round(position*100/duration))+'%':'0%';
+        const fmt=n=>Math.floor(n/60000)+':'+String(Math.floor(n/1000)%60).padStart(2,'0');
+        $('musicTime').textContent=(data.playing?'PLAYING · ':'PAUSED · ')+fmt(position)+(duration?' / '+fmt(duration):' · DURATION N/A');
+      }
+      setInterval(paintMediaTime,250);
       function renderMedia(data){
-          $('musicTitle').textContent=data.available?(data.title||'Untitled track'):'Nothing playing';
-          $('musicArtist').textContent=data.available?(data.artist||'Unknown artist'):'No active Windows media session';
-          const position=data.position_ms||0,duration=data.duration_ms||0;
-          $('musicBar').style.width=duration?Math.min(100,Math.round(position*100/duration))+'%':'0%';
-          const fmt=n=>Math.floor(n/60000)+':'+String(Math.floor(n/1000)%60).padStart(2,'0');
-          $('musicTime').textContent=data.available?(data.playing?'▶ PLAYING · ':'Ⅱ PAUSED · ')+(duration?fmt(position)+' / '+fmt(duration):'TIME N/A'):'NOT AVAILABLE / N-A';
-          renderArtwork(data);
+        mediaAnchor={data,at:performance.now()};
+        $('musicTitle').textContent=data.available?(data.title||'Untitled track'):'Nothing playing';
+        $('musicArtist').textContent=data.available?(data.artist||'Unknown artist'):'No active Windows media session';
+        if(!data.available)$('musicBar').style.width='0%';
+        paintMediaTime();renderArtwork(data);
       }
       function clearArtwork(){const img=$('albumCoverWeb');img.hidden=true;img.removeAttribute('src');img.closest('.music-studio').classList.remove('art-active');if(coverBlobUrl)URL.revokeObjectURL(coverBlobUrl);coverBlobUrl='';coverShownId='';coverPendingId='';}
       async function renderArtwork(data){
